@@ -1,0 +1,106 @@
+import sys
+import os
+
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+import torch
+import torch.optim as optim
+from torch.optim.lr_scheduler import CosineAnnealingLR
+from tqdm import tqdm
+from tensorboardX import SummaryWriter
+from datetime import datetime
+from argparse import ArgumentParser
+from torch.utils.data import DataLoader
+
+from utils.utils import warp
+from utils.datasets import ClockSyn, STNTest
+from models.stn import STNModel, STNLoss
+
+
+def train(args):
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    dt_string = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    writer = SummaryWriter(logdir=f"logs/stn/{dt_string}")
+
+    trn_dataset = ClockSyn(size=args.step * args.batch_size)
+    trn_loader = DataLoader(trn_dataset, batch_size=args.batch_size, shuffle=True)
+    print(f"Training dataset loaded, size: {len(trn_dataset)}")
+
+    test_loader = None
+    if args.test_dir and os.path.exists(args.test_dir):
+        test_dataset = STNTest(args.test_dir)
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
+        print(f"Validation dataset loaded from {args.test_dir}, size: {len(test_dataset)}")
+
+    model_stn = STNModel(pretrained=True).to(device)
+    optimizer = optim.AdamW(model_stn.parameters(), lr=args.lr)
+    scheduler = CosineAnnealingLR(optimizer, T_max=max(1, args.epochs * len(trn_loader)), eta_min=args.lr_min)
+    criterion = STNLoss()
+
+    if args.resume_path:
+        model_stn.load_state_dict(torch.load(args.resume_path))
+
+    total_loss = 0.0
+    best_loss = float("inf")
+    for ep in range(args.epochs):
+        train_pbar = tqdm(trn_loader, total=len(trn_loader), desc=f"Train Epoch {ep}", leave=False)
+        for i, (img, Minv) in enumerate(train_pbar):
+            model_stn.train()
+            optimizer.zero_grad()
+
+            img = img.float().to(device)
+            Minv = Minv.to(device)
+
+            Minv_pred, pred_st = model_stn(img)
+
+            loss = criterion(pred_st, Minv)
+            loss.backward()
+            optimizer.step()
+            scheduler.step()
+            total_loss += loss.item()
+
+            global_step = ep * len(trn_loader) + i
+            current_lr = scheduler.get_last_lr()[0]
+            writer.add_scalar("train/lr", current_lr, global_step)
+            writer.add_scalar("train/loss_reg", loss.item(), global_step)
+            writer.add_scalar("train/avg_loss_reg", total_loss / (global_step + 1), global_step)
+
+            train_pbar.set_postfix(
+                {"loss": f"{loss.item():.4f}", "avg_loss": f"{(total_loss / (global_step + 1)):.4f}", "lr": f"{current_lr:.2e}"}
+            )
+
+            if i == 0:
+                img_warped = warp(img, Minv_pred, device=device)
+                writer.add_images("train/original", img, global_step)
+                writer.add_images("train/warped", img_warped, global_step)
+
+        if test_loader:
+            model_stn.eval()
+            with torch.no_grad():
+                test_pbar = tqdm(test_loader, total=len(test_loader), desc=f"Test Epoch {ep}", leave=False)
+                for i, img in enumerate(test_pbar):
+                    img = img.to(device)
+                    Minv_pred, _ = model_stn(img)
+                    img_warped = warp(img, Minv_pred, device=device)
+
+                    if i == 0:
+                        writer.add_images("test/original", img, global_step)
+                        writer.add_images("test/warped", img_warped, global_step)
+
+        ep_loss = total_loss / ((ep + 1) * len(trn_loader))
+        if ep_loss < best_loss:
+            best_loss = ep_loss
+            torch.save(model_stn.state_dict(), f"logs/stn/{dt_string}/stn_ep{ep}_loss{ep_loss:.4f}.pth")
+
+
+if __name__ == "__main__":
+    parser = ArgumentParser()
+    parser.add_argument("--resume_path", type=str, default=None)
+    parser.add_argument("--epochs", type=int, default=100)
+    parser.add_argument("--batch_size", type=int, default=16)
+    parser.add_argument("--lr", type=float, default=1e-4)
+    parser.add_argument("--lr_min", type=float, default=1e-6)
+    parser.add_argument("--step", type=int, default=1000)
+    parser.add_argument("--test_dir", type=str, default=None)
+    args = parser.parse_args()
+    train(args)
