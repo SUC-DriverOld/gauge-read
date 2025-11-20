@@ -23,7 +23,7 @@ def preprocess_image(image_path):
     img = cv2.imread(image_path)
     img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     img = cv2.resize(img, (224, 224))
-    img = img.transpose(2, 0, 1) / 255.0 # (H, W, C) -> (C, H, W)
+    img = img.transpose(2, 0, 1) / 255.0  # (H, W, C) -> (C, H, W)
     img = torch.Tensor(img).unsqueeze(0)  # 添加batch维度
     return img
 
