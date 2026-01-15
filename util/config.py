@@ -42,11 +42,12 @@ def update_config(config, extra_config):
 
 
 def print_config(config):
-    print('==========Options============')
-    for k, v in config.items():
-        print('{}: {}'.format(k, v))
-    print('=============End=============')
+    for i, (k, v) in enumerate(sorted(config.items())):
+        print(f"\033[0;33m{k}\033[0m: {v}, ", end="\n" if i % 5 == 4 else "")
 
 # Load default config immediately
 default_config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'configs', 'config.json')
 load_config_from_json(default_config_path)
+
+if __name__ == "__main__":
+    print_config(config)

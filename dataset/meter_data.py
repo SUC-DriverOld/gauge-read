@@ -6,6 +6,8 @@ import numpy as np
 from dataset.data_util import pil_load_img
 from dataset.dataload import TextDataset, TextInstance
 import json
+from util.config import config as cfg
+from dataset.stn_transform import STNTransformer
 
 
 class Meter(TextDataset):
@@ -22,6 +24,12 @@ class Meter(TextDataset):
             mask_name = image_name.split('.')[0] + '.json'
             self.dataset.append((f'{image_path}/{image_name}', f'{mask_path}/{mask_name}', f'{mask_path1}/{mask_name}'))
             self.name.append(image_name)
+
+        if cfg.get('stn_correction', False):
+            # Use CPU for dataset workers to avoid multiprocessing issues with CUDA
+            self.stn_transformer = STNTransformer(cfg.get('stn_model_path', ''))
+        else:
+            self.stn_transformer = None
 
 
     @staticmethod
@@ -72,6 +80,10 @@ class Meter(TextDataset):
         except Exception as e:
             # print(f"Parse error: {e}")
             polygons = None
+        
+        # Apply STN correction
+        if self.stn_transformer is not None and polygons is not None:
+             image, polygons = self.stn_transformer(image, polygons)
 
         # if polygons is not None:
         #     print(f"Loaded {len(polygons)} polygons for {idx}")

@@ -6,7 +6,7 @@
         "num_workers": 0
     },
     "Experiment": {
-        "exp_name": "meter_data",
+        "exp_name": "meter_data_stn",
         "save_dir": "./model/",
         "vis_dir": "./vis/",
         "output_dir": "output",
@@ -26,7 +26,9 @@
         "max_annotation": 200,
         "max_roi": 600,
         "max_points": 20,
-        "use_hard": true
+        "use_hard": true,
+        "stn_correction": true,
+        "stn_model_path": "./logs/stn/stn_ep50_loss0.0108.pth"
     },
     "Training": {
         "max_epoch": 200,
