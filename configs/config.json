@@ -1,0 +1,64 @@
+{
+    "System": {
+        "gpu": "0",
+        "cuda": true,
+        "mgpu": true,
+        "num_workers": 0
+    },
+    "Experiment": {
+        "exp_name": "meter_data",
+        "save_dir": "./model/",
+        "vis_dir": "./vis/",
+        "output_dir": "output",
+        "resume": "",
+        "pretrain": true,
+        "viz": false
+    },
+    "Model": {
+        "net": "vgg",
+        "rescale": 255.0,
+        "means": [0.485, 0.456, 0.406],
+        "stds": [0.229, 0.224, 0.225]
+    },
+    "Data": {
+        "input_size": 640,
+        "test_size": [512, 1024],
+        "max_annotation": 200,
+        "max_roi": 600,
+        "max_points": 20,
+        "use_hard": true
+    },
+    "Training": {
+        "max_epoch": 200,
+        "start_epoch": 0,
+        "batch_size": 2,
+        "lr": 1e-4,
+        "lr_adjust": "fix",
+        "stepvalues": [],
+        "optim": "Adam",
+        "weight_decay": 0.0,
+        "gamma": 0.1,
+        "momentum": 0.9,
+        "save_freq": 5,
+        "display_freq": 10,
+        "viz_freq": 50,
+        "log_freq": 100,
+        "val_freq": 100
+    },
+    "PostProcess": {
+        "tr_thresh": 0.9,
+        "tcl_thresh": 0.4,
+        "expend": -0.05,
+        "active_connection": 3,
+        "graph_link": false,
+        "link_thresh": 0.85,
+        "k_at_hop": [8, 8],
+        "k_at_hop1": 10
+    },
+    "Evaluation": {
+        "checkepoch": 100,
+        "pointer": 0.6,
+        "dail": 0.5,
+        "text": 0.6
+    }
+}

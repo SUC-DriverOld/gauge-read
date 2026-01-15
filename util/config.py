@@ -1,69 +1,44 @@
 from easydict import EasyDict
 import torch
 import os
+import json
 
 config = EasyDict()
 
-#config.gpu = "0,1"
+def load_config_from_json(json_path):
+    """
+    Load config from json file and flatten it to config object
+    """
+    if not os.path.exists(json_path):
+        print(f"Warning: Config file {json_path} not found.")
+        return
 
-# dataloader jobs number
-config.num_workers = 0
-config.batch_size = 1
+    with open(json_path, 'r') as f:
+        data = json.load(f)
 
-# training epoch number
-config.max_epoch = 200
-
-config.start_epoch = 0
-
-# learning rate
-config.lr = 1e-4
-
-# using GPU
-config.cuda = True
-
-config.k_at_hop1 = 10
-
-config.output_dir = 'output'
-
-config.input_size = 640
-
-# max polygon per image
-config.max_annotation = 200
-
-# max polygon per image
-# synText, total-text:600; CTW1500: 1200; icdar: ; MLT: ; TD500: .
-config.max_roi = 600
-
-# max point per polygon
-config.max_points = 20
-
-# use hard examples (annotated as '#')
-config.use_hard = True
-
-# demo tr threshold
-config.tr_thresh = 0.9  #0.9
-
-# demo tcl threshold
-config.tcl_thresh = 0.4
-#0.9 0.5 81.14
-
-# expand ratio in post processing
-config.expend = -0.05 #0.15
-
-# k-n graph
-config.k_at_hop = [8, 8]
-
-# unn connect
-config.active_connection = 3
-
-config.graph_link = False  ### for Total-text icdar15 graph_link = False; forTD500 and CTW1500, graph_link = True
-config.link_thresh = 0.85 #0.9
+    # Flatten the json configs
+    for category, items in data.items():
+        for k, v in items.items():
+            config[k] = v
+            
+    # Set device
+    config.device = torch.device('cuda') if config.cuda else torch.device('cpu')
 
 def update_config(config, extra_config):
+    # Pass 1: Parse standard arguments
     for k, v in vars(extra_config).items():
-        config[k] = v
-    # print(config.gpu)
-    config.device = torch.device('cuda') if config.cuda else torch.device('cpu')
+        if k in config:
+             # Only update if explicitly different from default? 
+             # Or just overwrite. Argparse defaults might be issue.
+             # If option.py has defaults, they will overwrite json.
+             # We should ensure option.py defaults match json or are None.
+             config[k] = v
+        else:
+            # If it's a new arg from argparse not in json
+             config[k] = v
+             
+    # Pass 2: Re-evaluate device in case cuda flag changed
+    config.device = torch.device('cuda') if config.get('cuda', False) else torch.device('cpu')
 
 
 def print_config(config):
@@ -71,3 +46,7 @@ def print_config(config):
     for k, v in config.items():
         print('{}: {}'.format(k, v))
     print('=============End=============')
+
+# Load default config immediately
+default_config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'configs', 'config.json')
+load_config_from_json(default_config_path)
