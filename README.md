@@ -1,253 +1,78 @@
-# 仪表识别方案
+# Detect and Read meters in the wild
+This is areleased system towards detection and recognition of complex meters in wild. The system can be divided into three moduels. Fisrtly, a yolo-based detector is applied to get pure meter region. Secondly, a spatial transformer module is eatablished to rectify the position of meter. Lastly, an end-to-end network is to read meter values, which is implemented by pointer/dail predcition and key number learning.    
 
-## 0. 裁剪/增强
+## Visulization results
+![](1.png)
+![](2.png)
 
-使用YOLOv8或者CBNetV2识别输入图像中的仪表盘（两种方案任意选择），并裁剪出仪表盘区域，作为后续使用。【可选】如果图片存在模糊，暗光等影响识别的问题，可以使用Image Restoration进行增强
+Left row is the original image, middle row is the process of meter rectification, right row is the result of meter value reading.
 
-## 1. 识别模型
 
-### 1.1 矫正
 
-使用空间变换网络（STN）对定位后的时钟进行几何校正，利用仿射变换将倾斜表盘转换为标准正面视图，精确定位仪表盘
+## ToDo List
 
-### 1.2 圆拟合
+- [x] Release testing code
+- [x] Release training code and dataset
+- [x] existing three-stage models
+- [ ] A new branch for digital-meter recognition
+- [x] Document for testing
+- [x] Document for training
+- [x] Demo script for single image
 
-使用语义分割，将输入的仪表盘图像分割为仪表区域和背景区域，并使用圆拟合算法将仪表盘区域拟合为圆，得到仪表盘的圆心，然后将仪表盘图像裁剪为椭圆区域作为下一步的输入
 
-### 1.2 识别起始点，结束点，指针指向的点（指针针尖）
+## Installation
 
-使用一个CNN分类网络识别识别起始点，结束点，指针指向的点即指针针尖。分类是0~359度，即360分类，输出是三个角度，分别是起始点，结束点，指针针尖对应的角度。0度的位置固定，比如正下方是0度，然后顺时针角度增加。
+### Requirements:
+- Python3 (Python3.7 is recommended)
+- PyTorch >= 1.0 
+- torchvision from master
+- numpy
+- skimage
+- OpenCV==3.0.x
+- CUDA >= 9.0 (10.0 is recommended)
 
-### 1.3 读数
+## Meter Detection 
+We use official YOLO-V5 to detect meters.
 
-有了三个关键点的角度，就可以通过角度计算读数，因为上述一系列操作都没有考虑单位，所以最终输出的是一个0~1之间的小数，最终的读数是这个小数乘以仪表盘的量程范围，例如输出0.5，仪表盘量程是0~10，那么最终读数就是5
+We release a dataset for training model, which can be downloaded from [data_detection]( https://drive.google.com/file/d/1RKcqJ0RWaBPpBbMtWwcgQ4S66Iwf97RS/view?usp=drive_link) The data is COCO-format and label 0 and 1 represent pointer meters and digital meters.
 
-## 2. 量程/单位识别
+We also provide trained weight in [yolo_weight](https://drive.google.com/file/d/1bHYpJro3ERmNTRO2JEo1inyU0_juqw5z/view?usp=drive_link) You dan put it in the yolov5 folder for inference.
 
-此过程有两种方案，方案一使用现成的large vision model直接让其输出起始数值，结束数值，以及单位，已经写好代码了，在test_qwen_vl.py
+## Meter Alignment
+We implement meter alignment by STN network. However, we obseve it is time-consuming. Thus we remove it in the latest version. You can still find it in the master branch. We also provide the weight you can refer in [alignment weight](https://drive.google.com/file/d/1406CI_GqRBpXn1-AChM6NzdX8r9FAXl-/view?usp=sharing)
 
-方案二：仅识别是起始数值，结束数值（纯浮点数字，更容易更快速）使用一个vision encoder + 小型llm 的方案，vision encoder将仪表盘图像编码为向量，然后通过一定的训练，让llm输出起始数值，结束数值，此方案放弃了单位识别，因为单位识别比较复杂
+## Meter Recognition
+We design a network for read meters, which consists of a pointer prediction head, dail prediction head, and a ocr-based value prediction head. By a post-processing method, meter readings can be obtained.
 
-## 训练方式
+The dataset for training the network has been realsed in [data](https://drive.google.com/file/d/1fFSSwoWAHkZWqgVCuqwOSFjSVfkjGk2U/view?usp=drive_link) the data is annotated by Labelme tool. "Train" folder contains pointer and dail information, and "Train1" folder contains value information. 
 
-自监督训练，目前有少量的标注数据和大量的无标注数据，可以先拿少量标注数据训练一个模型，用来给无标注数据打标签，然后循环迭代多次
+You can run ```python viz_label.py``` to visualize different annotations.
 
-一共训练3个模型
-1. 裁剪模型
-2. 识别模型
-3. 量程/单位识别模型（可选）
+![](3.png)
 
-第二个模型无监督训练，思路：
+You can run ```python train.py``` to train your own dataset. The training configurations are in ```util/option.py```
 
-> **不要直接无监督训练角度分类，而是引入物理规律、几何约束、图像一致性、风格一致性，自监督地让模型自己恢复“仪表盘标准化几何结构 + 指针方向”。**
+We also provide trained weight in [read_weight](https://drive.google.com/file/d/1sHmEEf9E0_kvL0LW1S5Y5jjFgjx_O5Dj/view?usp=drive_link) You should put it in the ```model/meter_data```
 
-要做到无监督，需要将三个子任务全部转换成 **几何一致性损失（geometric consistency losses）**。
+## Demo 
+You can run a demo script for a single image inference.
 
-把模型拆成如下结构：
+```python predict_online.py```
 
+## Paper
+The project only for academic research, if you are interested in it, please star our project! And cite our paper as follows:
 ```
-Input → STN → Canonical Gauge View → Segmenter → Circle Fit --> angle head
-```
-
-训练不依赖标签，而依赖你对仪表结构的“先验假设”：
-
-* 仪表盘是一个圆
-* 刻度起点与刻度终点位于圆周上
-* 指针是一条从中心指向边缘的线
-* STN 需要让倾斜图变直
-* 分割图必须近似一个圆
-* 指针经过中心，指向特定方向
-
-
-# 🟥 1. 无监督训练 **STN**（核心之一）
-
-STN 的任务是把倾斜/透视图矫正到统一视角。
-
-## ✔ 无监督损失：**圆形一致性损失（Circularity Loss）**
-
-思路：
-“一个正视仪表盘应该呈现完美圆形”，
-所以 STN 变换后的 mask 必须尽可能接近一个圆。
-
-### 具体做法：
-
-1. 输入图 → STN → 变换图
-2. Segmenter 输出一个预测 mask
-3. 对 mask 做圆拟合，得到拟合圆 C_fit
-4. 定义损失：
-
-```
-L_stn = mean(| mask_boundary_distance_to_C_fit |)
+@misc{shu2023read,
+      title={Read Pointer Meters in complex environments based on a Human-like Alignment and Recognition Algorithm}, 
+      author={Yan Shu and Shaohui Liu and Honglei Xu and Feng Jiang},
+      year={2023},
+      eprint={2302.14323},
+      archivePrefix={arXiv},
+      primaryClass={cs.CV}
+}
 ```
 
-即：mask 边界到拟合圆的距离要尽可能小。
 
-### 效果：
 
-STN 会被逼着把透视变形、椭圆、斜圆
-**变成真正的圆**。
 
-这是一个可以完全无监督学习的信号。
 
----
-
-# 🟩 2. 无监督训练分割（Segmenter）
-
-分割任务本质上就是将仪表盘区域从背景中分出来。
-
-## ✔ 无监督分割思路：
-
-利用：
-
-* **强一致性（Consistency Regularization）**
-* **教师-学生结构（Mean Teacher）**
-
-### 方法：
-
-对同一张图施加不同增强（旋转、裁剪、亮度变化）：
-
-```
-Image A → STN → Segmenter → mask_A  
-Image B → STN → Segmenter → mask_B  
-```
-
-要求：
-
-```
-STN(A) ≈ STN(B)  
-mask_A ≈ mask_B
-```
-
-损失：
-
-```
-L_seg = || mask_A - mask_B ||^2
-```
-
-Segmenter 会自然学到“哪里是前景仪表盘区域”，因为这是 A 和 B 唯一都一致的视觉结构。
-
----
-
-# 🟦 3. 无监督训练“角度识别”（start / end / pointer）
-
-这是最难也最关键的部分：如何无监督训练“关键点与角度”？
-
-这里我们利用仪表本身的**物理结构**和**几何约束**：
-
----
-
-# ⭐ 角度识别的核心思路（重要）
-
-你不需要给 start / end / pointer 真实标签。
-你只需要保证：
-
-1. **start 和 end 在圆周上**
-2. **ptr（指针）必须经过圆心**
-3. 指针方向和图像内容一致（Intensity gradient / Hough line）
-4. start 和 end 在不同增强下必须一致（Consistency）
-
-这就构成了一个可以训练的几何系统。
-
----
-
-# ✔ Loss A：指针方向强化损失（利用图像梯度）
-
-指针在图像中是一条线，可以从强边缘检测中提取方向。
-
-### 使用方法：
-
-计算 Sobel / Canny 得到梯度方向 θ_grad。
-
-要求预测角度 θ_ptr 与梯度方向一致：
-
-```
-L_ptr = 1 - cos(θ_ptr - θ_grad)
-```
-
-无标签，但图像内容提供监督。
-
----
-
-# ✔ Loss B：start/end 在圆周约束
-
-start/end 的坐标必须满足：
-
-```
-distance(center, point) = radius
-```
-
-损失：
-
-```
-L_circle = | sqrt((x - cx)^2 + (y - cy)^2) - r |
-```
-
-这就是强几何监督。
-
----
-
-# ✔ Loss C：旋转一致性损失（关键点不应随亮度/噪声变化）
-
-对图像做两种增强 A 和 B：
-
-```
-A → STN → angle_head → θA  
-B → STN → angle_head → θB  
-```
-
-要求：
-
-```
-L_consistency = || θA - θB ||
-```
-
-这让模型“稳定找到同样的点位置”。
-
----
-
-# ✔ Loss D：指针必须从中心出发
-
-```
-( x_ptr - cx ) / r  ≈ cos(theta_pred)
-( y_ptr - cy ) / r  ≈ sin(theta_pred)
-```
-
-即：预测角度必须指向正确图像位置。
-
----
-
-# 🧮 最终无监督总损失（可直接实现）
-
-```
-L = w1 * L_stn
-  + w2 * L_seg
-  + w3 * L_circle
-  + w4 * L_ptr
-  + w5 * L_consistency
-  + w6 * L_centerline
-```
-
-全部均可无监督实现。
-
----
-
-# 🎯 最终效果
-
-
-模型会学习：
-
-* STN 把任何表盘变成标准圆形
-* 分割分出表盘区域
-* 圆拟合得到圆心
-* angle_head 学会找到两个固定刻度点（start/end）
-* 指针方向预测收敛到实际指针方向
-
-最终输出：
-
-```
-θ_start
-θ_end
-θ_ptr
-```
-
-无需真实人工标签。
