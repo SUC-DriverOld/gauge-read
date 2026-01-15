@@ -2,8 +2,7 @@ import os
 import cv2
 import numpy as np
 from util.augmentation import BaseTransform
-from util.config import config as cfg, update_config, print_config
-from util.option import BaseOptions
+from util.config import config as cfg, print_config
 from network.textnet import TextNet
 from util.detection_mask import TextDetector as TextDetector_mask
 import torch
@@ -14,11 +13,6 @@ from get_meter_area import Detector
 from dataset.stn_transform import STNTransformer
 
 # parse arguments
-
-option = BaseOptions()
-args = option.initialize()
-
-update_config(cfg, args)
 print_config(cfg)
 
 # Initialize STN if enabled

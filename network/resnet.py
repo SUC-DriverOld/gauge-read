@@ -22,8 +22,8 @@ class ResNet(nn.Module):
             print(" base model is not support !")
 
         if pretrain:
-            print("load the {} weight from ./cache".format(name))
-            base_net.load_state_dict(model_zoo.load_url(model_urls["resnet50"], model_dir="./cache"))
+            print("load the {} weight from ./pretrain".format(name))
+            base_net.load_state_dict(model_zoo.load_url(model_urls["resnet50"], model_dir="./pretrain"))
         # print(base_net)
         self.stage1 = nn.Sequential(base_net.conv1, base_net.bn1, base_net.relu, base_net.maxpool)
         self.stage2 = base_net.layer1

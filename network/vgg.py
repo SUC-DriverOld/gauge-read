@@ -22,8 +22,8 @@ class VggNet(nn.Module):
         else:
             print(" base model is not support !")
         if pretrain:
-            print("load the {} weight from ./cache".format(name))
-            base_net.load_state_dict(model_zoo.load_url(model_urls[name], model_dir="./cache"))
+            print("load the {} weight from ./pretrain".format(name))
+            base_net.load_state_dict(model_zoo.load_url(model_urls[name], model_dir="./pretrain"))
 
         if name == "vgg16":
             self.stage1 = nn.Sequential(*[base_net.features[layer] for layer in range(0, 5)])

@@ -11,10 +11,9 @@ from dataset import Meter
 from network.loss import TextLoss
 from network.textnet import TextNet
 from util.augmentation import Augmentation
-from util.config import config as cfg, update_config, print_config
+from util.config import config as cfg, print_config
 from util.misc import AverageMeter
 from util.misc import mkdirs, to_device
-from util.option import BaseOptions
 from util.shedule import FixLR
 from util.tool import collate_fn
 from util.converter import StringLabelConverter
@@ -167,16 +166,7 @@ def main():
 if __name__ == "__main__":
     np.random.seed(2019)
     torch.manual_seed(2019)
-
-    # parse arguments
-    option = BaseOptions()
-
-    args = option.initialize()
-
-    update_config(cfg, args)
     print_config(cfg)
-
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpu
 
     # main
     main()
