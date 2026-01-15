@@ -307,19 +307,6 @@ def draw_random_lines(img, cx, cy, r, R, num=3):
 
 
 def gen_gauge(use_homography=True, use_artefacts=False, use_arguments=False):
-    """
-    生成合成仪表盘图像
-
-    Returns:
-            img: 生成的图像
-            start_angle: 起始刻度角度 (0-360)
-            end_angle: 结束刻度角度 (0-360)
-            pointer_angle: 指针角度 (0-360)
-            start_value: 起始刻度值
-            end_value: 结束刻度值
-            reading_value: 当前读数
-            Minv: 透视变换逆矩阵
-    """
     # hyperparameters:
     H = 512
     W = 512
@@ -377,7 +364,7 @@ def gen_gauge(use_homography=True, use_artefacts=False, use_arguments=False):
 
     # 指针
     pointer_ratio = minmax(0.0, 1.0)  # 指针在量程中的位置
-    pointer_angle = angle_start + pointer_ratio * angle_range
+    angle_pointer = angle_start + pointer_ratio * angle_range
 
     # 计算当前读数
     reading_value = start_value + pointer_ratio * (end_value - start_value)
@@ -478,7 +465,7 @@ def gen_gauge(use_homography=True, use_artefacts=False, use_arguments=False):
     img = draw_unit(img, unit_text, (cx, cy), r, angle_start, angle_end, num_font, unit_scale, num_colour, num_font_thickness)
 
     # pointer - 绘制指针
-    source, dest = get_coordinates(cx, cy, r, pointer_scale, pointer_back_scale, pointer_angle)
+    source, dest = get_coordinates(cx, cy, r, pointer_scale, pointer_back_scale, angle_pointer)
     img = draw_line(img, source, dest, pointer_colour, pointer_thickness, shadow=pointer_shadow)
 
     if use_artefacts:
@@ -525,23 +512,24 @@ def gen_gauge(use_homography=True, use_artefacts=False, use_arguments=False):
             sz = np.random.randint(64, 256)
             img = cv2.resize(img, (sz, sz))
 
-    return img, angle_start, angle_end, pointer_angle, start_value, end_value, reading_value, Minv
+    return (
+        img,
+        (angle_start, angle_end, angle_pointer),
+        (start_value, end_value, reading_value),
+        Minv
+    )
 
 
 if __name__ == "__main__":
     from pathlib import Path
 
     imgs = []
-    for i in range(20):
-        img, angle_start, angle_end, pointer_angle, start_value, end_value, reading_value, Minv = gen_gauge()
-        print(
-            f"Gauge {i+1}: {start_value} to {end_value}, Angle: {angle_start:.1f} to {angle_end:.1f}, Pointer Angle: {pointer_angle:.1f}, Reading: {reading_value:.1f}"
-        )
+    for _ in range(20):
+        img, angle, value, Minv = gen_gauge()
         img = cv2.resize(img, (512, 512))
         imgs.append(img)
 
-    rows = 4
-    cols = 5
+    rows, cols = 4, 5
     h, w = imgs[0].shape[:2]
 
     row_imgs = []

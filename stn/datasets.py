@@ -4,18 +4,21 @@ import cv2
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from PIL import Image
-from .SynGagues import gen_gauge
+from SynGagues import gen_gauge
 
 
 class ClockSyn(Dataset):
-    def __init__(self, size=80000):
+    def __init__(self, size=80000, use_homography=True, use_artefacts=True, use_arguments=True):
         self.size = size
+        self.use_homography = use_homography
+        self.use_artefacts = use_artefacts
+        self.use_arguments = use_arguments
 
     def __len__(self):
         return self.size
 
     def __getitem__(self, i):
-        img, _, _, _, _, _, _, Minv = gen_gauge()
+        img, _, _, Minv = gen_gauge(self.use_homography, self.use_artefacts, self.use_arguments)
         img = np.clip(img, 0, 255)
         img = cv2.resize(img, (224, 224)) / 255.0
         img = img.transpose(2, 0, 1)  # (H, W, C) -> (C, H, W)

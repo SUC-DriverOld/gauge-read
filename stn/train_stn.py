@@ -8,21 +8,24 @@ import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
-from datetime import datetime
 from argparse import ArgumentParser
 from torch.utils.data import DataLoader
 
-from utils.utils import warp
-from utils.datasets import ClockSyn, STNTest
-from models.stn import STNModel, STNLoss
+from utils import warp
+from datasets import ClockSyn, STNTest
+from stn_model import STNModel, STNLoss
 
 
 def train(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
-    dt_string = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    writer = SummaryWriter(logdir=f"logs/stn/{dt_string}")
+    writer = SummaryWriter(logdir=f"logs/{args.exp_name}")
 
-    trn_dataset = ClockSyn(size=args.step * args.batch_size)
+    trn_dataset = ClockSyn(
+        size=args.step * args.batch_size,
+        use_homography=(not args.disable_homography),
+        use_artefacts=(not args.disable_artefacts),
+        use_arguments=(not args.disable_arguments)
+    )
     trn_loader = DataLoader(trn_dataset, batch_size=args.batch_size, shuffle=True)
     print(f"Training dataset loaded, size: {len(trn_dataset)}")
 
@@ -62,8 +65,8 @@ def train(args):
             global_step = ep * len(trn_loader) + i
             current_lr = scheduler.get_last_lr()[0]
             writer.add_scalar("train/lr", current_lr, global_step)
-            writer.add_scalar("train/loss_reg", loss.item(), global_step)
-            writer.add_scalar("train/avg_loss_reg", total_loss / (global_step + 1), global_step)
+            writer.add_scalar("train/loss", loss.item(), global_step)
+            writer.add_scalar("train/avg_loss", total_loss / (global_step + 1), global_step)
 
             train_pbar.set_postfix(
                 {"loss": f"{loss.item():.4f}", "avg_loss": f"{(total_loss / (global_step + 1)):.4f}", "lr": f"{current_lr:.2e}"}
@@ -90,11 +93,12 @@ def train(args):
         ep_loss = total_loss / ((ep + 1) * len(trn_loader))
         if ep_loss < best_loss:
             best_loss = ep_loss
-            torch.save(model_stn.state_dict(), f"logs/stn/{dt_string}/stn_ep{ep}_loss{ep_loss:.4f}.pth")
+            torch.save(model_stn.state_dict(), f"logs/{args.exp_name}/ep{ep}_loss{ep_loss:.4f}.pth")
 
 
 if __name__ == "__main__":
     parser = ArgumentParser()
+    parser.add_argument("--exp_name", type=str, default="stn_new")
     parser.add_argument("--resume_path", type=str, default=None)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=16)
@@ -102,5 +106,8 @@ if __name__ == "__main__":
     parser.add_argument("--lr_min", type=float, default=1e-6)
     parser.add_argument("--step", type=int, default=1000)
     parser.add_argument("--test_dir", type=str, default=None)
+    parser.add_argument("--disable_homography", action="store_true")
+    parser.add_argument("--disable_artefacts", action="store_true")
+    parser.add_argument("--disable_arguments", action="store_true")
     args = parser.parse_args()
     train(args)

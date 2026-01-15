@@ -7,8 +7,8 @@ import torch
 import cv2
 import numpy as np
 from argparse import ArgumentParser
-from utils.utils import warp
-from models.stn import STNModel
+from utils import warp
+from stn_model import STNModel
 
 
 def load_stn_model(model_path, device="cuda"):
@@ -37,19 +37,6 @@ def postprocess_image(img_tensor):
 
 
 def rectify_clock_image(model_stn, image_path, device="cuda"):
-    """
-    使用STN模型矫正时钟图像
-
-    参数:
-        model_stn: 训练好的STN模型
-        image_path: 输入图像路径
-        device: 计算设备
-
-    返回:
-        original_img: 原始图像 (numpy array)
-        warped_img: 矫正后的图像 (numpy array)
-        homography_matrix: 预测的单应矩阵 (3x3 numpy array)
-    """
     img = preprocess_image(image_path)
     img = img.float().to(device)
 
