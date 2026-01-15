@@ -135,9 +135,17 @@ class STNTransformer:
             return image, polygons
 
         h, w = image.shape[:2]
+        m = max(h, w)
         
-        # Warp image
-        image_warped = cv2.warpPerspective(image, H_mat, (w, h))
+        # Create padded canvas
+        if len(image.shape) == 3:
+            canvas = np.zeros((m, m, image.shape[2]), dtype=image.dtype)
+        else:
+            canvas = np.zeros((m, m), dtype=image.dtype)
+        canvas[:h, :w] = image
+        
+        # Warp canvas instead of original image
+        image_warped = cv2.warpPerspective(canvas, H_mat, (m, m))
         
         # Warp polygons
         new_polygons = []

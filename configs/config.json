@@ -30,6 +30,10 @@
         "stn_correction": true,
         "stn_model_path": "./logs/stn/stn_ep50_loss0.0108.pth"
     },
+    "Predict": {
+        "use_yolo": true,
+        "use_stn": true
+    },
     "Training": {
         "max_epoch": 200,
         "start_epoch": 0,

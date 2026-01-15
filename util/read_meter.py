@@ -71,9 +71,9 @@ class MeterReader(object):
         one = [[pointer_line[0][0], pointer_line[0][1]], [a1[0], a1[1]]]
         two = [[pointer_line[0][0], pointer_line[0][1]], [a2[0], a2[1]]]
         three = [[pointer_line[0][0], pointer_line[0][1]], [pointer_line[1][0], pointer_line[1][1]]]
-        # print("one", one)
-        # print("two", two)
-        # print("three",three)
+        print("one", one)
+        print("two", two)
+        print("three",three)
 
         one=np.array(one)
         two=np.array(two)
@@ -90,18 +90,30 @@ class MeterReader(object):
         # print("flag",flag)
 
         std_ang = self.angle(v1, v2)
-        # print("std_result", std_ang)
+        print("std_result", std_ang)
         now_ang = self.angle(v1, v3)
         if flag >0:
             now_ang=360-now_ang
-        # print("now_result", now_ang)
+        print("now_result", now_ang)
 
 
         # calculate value
+        ratio = 0.0
+        if std_ang != 0:
+            ratio = now_ang / std_ang
+        
+        print(f"Angle Ratio (Pointer/Full): {ratio:.4f}")
+
         if number!=None and number[0]!="":
             two_value = float(number[0])
         else:
-            return "can not recognize number"
+             # Even if number is missing, show ratio
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
+            cv2.imshow("result", ori_img)
+            cv2.waitKey(0)
+            return f"Ratio: {ratio}"
+
         if std_ang * now_ang !=0:
             value = (two_value / std_ang)
             value=value*now_ang
@@ -110,11 +122,13 @@ class MeterReader(object):
 
         if flag>0 and distance<40:
             value=0.00
+            ratio = 0.0 # Correction for zero position
         else:
             value=round(value,3)
 
         font = cv2.FONT_HERSHEY_SIMPLEX
         ori_img = cv2.putText(ori_img, str(value), (30, 30), font, 1.2, (255, 0,255), 2)
+        ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
 
         cv2.imshow("result",ori_img)
         cv2.waitKey(0)

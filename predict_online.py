@@ -11,6 +11,7 @@ from util.misc import to_device
 from util.read_meter import MeterReader
 from util.converter import keys,StringLabelConverter
 from get_meter_area import  Detector
+from dataset.stn_transform import STNTransformer
 
 # parse arguments
 
@@ -20,7 +21,14 @@ args = option.initialize()
 update_config(cfg, args)
 print_config(cfg)
 
-predict_dir='datas/test/'
+# Initialize STN if enabled
+stn_transformer = None
+if cfg.get('use_stn', False):
+    stn_model_path = cfg.get('stn_model_path', '')
+    print(f"Initializing STN from {stn_model_path}")
+    stn_transformer = STNTransformer(stn_model_path, device=cfg.device)
+
+predict_dir='datas/demo'
 
 model = TextNet(is_training=False, backbone=cfg.net)
 model_path = os.path.join("pretrain/textgraph_vgg_100.pth")
@@ -52,15 +60,22 @@ for index in image_list:
 
     
     # detect meter area
-    # image, image_info, digital_list, meter_list = det.detect(image, index)
+    if cfg.get('use_yolo', False):
+        _, _, _, meter_list = det.detect(image, index)
+    else:
+        meter_list = [image]
     
-    meter_list = [image]
+    # meter_list = [image]
 
     if len(meter_list)==0:
         print("no detected meter")
         continue
     else:
         for i in meter_list:
+            
+            if stn_transformer is not None:
+                i, _ = stn_transformer(i, None)
+
             cv2.imshow("det",i)
             cv2.waitKey(0)
 
