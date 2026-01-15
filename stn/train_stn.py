@@ -24,7 +24,7 @@ def train(args):
         size=args.step * args.batch_size,
         use_homography=(not args.disable_homography),
         use_artefacts=(not args.disable_artefacts),
-        use_arguments=(not args.disable_arguments)
+        use_arguments=(not args.disable_arguments),
     )
     trn_loader = DataLoader(trn_dataset, batch_size=args.batch_size, shuffle=True)
     print(f"Training dataset loaded, size: {len(trn_dataset)}")

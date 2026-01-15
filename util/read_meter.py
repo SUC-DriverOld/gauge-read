@@ -1,28 +1,21 @@
-import math
 import os
 import cv2
-import numpy
 import numpy as np
-import torch
 from skimage import morphology
 
-class MeterReader(object):
 
+class MeterReader(object):
     def __init__(self):
         pass
 
-    def __call__(self, image,point_mask,dail_mask,word_mask,number,std_point):
-
+    def __call__(self, image, point_mask, dail_mask, word_mask, number, std_point):
         img_result = image.copy()
-        value=self.find_lines(img_result,point_mask,dail_mask,number,std_point)
-        print("value",value)
+        value = self.find_lines(img_result, point_mask, dail_mask, number, std_point)
+        print("value", value)
 
         return value
 
-
-
-    def find_lines(self,ori_img,pointer_mask,dail_mask,number,std_point):
-
+    def find_lines(self, ori_img, pointer_mask, dail_mask, number, std_point):
         # 实施骨架算法
         pointer_skeleton = morphology.skeletonize(pointer_mask)
         pointer_edges = pointer_skeleton * 255
@@ -36,8 +29,7 @@ class MeterReader(object):
         # cv2.imshow("dail_edges", dail_edges)
         # cv2.waitKey(0)
 
-        pointer_lines = cv2.HoughLinesP(pointer_edges, 1, np.pi / 180, 10, np.array([]), minLineLength=10,
-                                        maxLineGap=400)
+        pointer_lines = cv2.HoughLinesP(pointer_edges, 1, np.pi / 180, 10, np.array([]), minLineLength=10, maxLineGap=400)
         coin1, coin2 = None, None
 
         try:
@@ -47,7 +39,6 @@ class MeterReader(object):
                 cv2.line(ori_img, (x1, y1), (x2, y2), (255, 0, 255), 2)
         except TypeError:
             return "can not detect pointer"
-
 
         h, w, _ = ori_img.shape
         center = (0.5 * w, 0.5 * h)
@@ -60,7 +51,7 @@ class MeterReader(object):
 
         # print("pointer_line", pointer_line)
 
-        if std_point==None:
+        if std_point == None:
             return "can not detect dail"
 
         # calculate angle
@@ -73,64 +64,65 @@ class MeterReader(object):
         three = [[pointer_line[0][0], pointer_line[0][1]], [pointer_line[1][0], pointer_line[1][1]]]
         print("one", one)
         print("two", two)
-        print("three",three)
+        print("three", three)
 
-        one=np.array(one)
-        two=np.array(two)
+        one = np.array(one)
+        two = np.array(two)
         three = np.array(three)
 
-        v1=one[1]-one[0]
-        v2=two[1]-two[0]
+        v1 = one[1] - one[0]
+        v2 = two[1] - two[0]
         v3 = three[1] - three[0]
 
-        distance=self.get_distance_point2line([a1[0], a1[1]],[pointer_line[0][0], pointer_line[0][1], pointer_line[1][0], pointer_line[1][1]])
+        distance = self.get_distance_point2line(
+            [a1[0], a1[1]], [pointer_line[0][0], pointer_line[0][1], pointer_line[1][0], pointer_line[1][1]]
+        )
         # print("dis",distance)
 
-        flag=self.judge(pointer_line[0],std_point[0],pointer_line[1])
+        flag = self.judge(pointer_line[0], std_point[0], pointer_line[1])
         # print("flag",flag)
 
         std_ang = self.angle(v1, v2)
         print("std_result", std_ang)
         now_ang = self.angle(v1, v3)
-        if flag >0:
-            now_ang=360-now_ang
+        if flag > 0:
+            now_ang = 360 - now_ang
         print("now_result", now_ang)
-
 
         # calculate value
         ratio = 0.0
         if std_ang != 0:
             ratio = now_ang / std_ang
-        
+
         print(f"Angle Ratio (Pointer/Full): {ratio:.4f}")
 
-        if number!=None and number[0]!="":
+        if number != None and number[0] != "":
             two_value = float(number[0])
         else:
-             # Even if number is missing, show ratio
+            # Even if number is missing, show ratio
             font = cv2.FONT_HERSHEY_SIMPLEX
             ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
             cv2.imshow("result", ori_img)
             cv2.waitKey(0)
             return f"Ratio: {ratio}"
 
-        if std_ang * now_ang !=0:
-            value = (two_value / std_ang)
-            value=value*now_ang
+        if std_ang * now_ang != 0:
+            value = two_value / std_ang
+            value = value * now_ang
         else:
             return "angle detect error"
 
-        if flag>0 and distance<40:
-            value=0.00
-            ratio = 0.0 # Correction for zero position
+        if flag > 0 and distance < 40:
+            value = 0.00
+            ratio = 0.0  # Correction for zero position
         else:
-            value=round(value,3)
+            value = round(value, 3)
 
         font = cv2.FONT_HERSHEY_SIMPLEX
-        ori_img = cv2.putText(ori_img, str(value), (30, 30), font, 1.2, (255, 0,255), 2)
+        ori_img = cv2.putText(ori_img, str(value), (30, 30), font, 1.2, (255, 0, 255), 2)
         ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
 
-        cv2.imshow("result",ori_img)
+        cv2.imshow("result", ori_img)
         cv2.waitKey(0)
 
         return value
@@ -147,35 +139,32 @@ class MeterReader(object):
         distance = np.abs(np.cross(vec1, vec2)) / np.linalg.norm(line_point1 - line_point2)
         return distance
 
+    def judge(self, p1, p2, p3):
+        A = p2[1] - p1[1]
+        B = p1[0] - p2[0]
+        C = p2[0] * p1[1] - p1[0] * p2[1]
 
-    def judge(self,p1,p2,p3):
-        A=p2[1]-p1[1]
-        B=p1[0]-p2[0]
-        C=p2[0]*p1[1] - p1[0]*p2[1]
-
-        value=A*p3[0] + B*p3[1] +C
+        value = A * p3[0] + B * p3[1] + C
 
         return value
 
+    def angle(self, v1, v2):
+        lx = np.sqrt(v1.dot(v1))
+        ly = np.sqrt(v2.dot(v2))
+        cos_angle = v1.dot(v2) / (lx * ly)
 
-    def angle(self,v1, v2):
-        lx=np.sqrt(v1.dot(v1))
-        ly=np.sqrt(v2.dot(v2))
-        cos_angle=v1.dot(v2) / (lx * ly)
-
-        angle=np.arccos(cos_angle)
-        angle2=angle*360 / 2 / np.pi
+        angle = np.arccos(cos_angle)
+        angle2 = angle * 360 / 2 / np.pi
 
         return angle2
 
 
-
-if __name__ == '__main__':
+if __name__ == "__main__":
     tester = MeterReader()
-    root = 'data/images/val'
+    root = "data/images/val"
     for image_name in os.listdir(root):
         print(image_name)
-        path = f'{root}/{image_name}'
+        path = f"{root}/{image_name}"
         image = cv2.imread(path)
         result = tester(image)
         print(result)

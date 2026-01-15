@@ -13,32 +13,33 @@ except ImportError:
     print("Warning: Could not import STNModel. STN correction will be disabled.")
     STNModel = None
 
+
 class STNTransformer:
-    def __init__(self, model_path, device='cpu'):
+    def __init__(self, model_path, device="cpu"):
         if STNModel is None:
             self.model = None
             return
 
         self.device = device
         self.model = STNModel(pretrained=False)
-        
+
         if os.path.exists(model_path):
             try:
                 # Load state dict
                 checkpoint = torch.load(model_path, map_location=device)
                 # Handle case where checkpoint might be model state or dict
-                if 'model_state_dict' in checkpoint:
-                     self.model.load_state_dict(checkpoint['model_state_dict'])
+                if "model_state_dict" in checkpoint:
+                    self.model.load_state_dict(checkpoint["model_state_dict"])
                 else:
-                     self.model.load_state_dict(checkpoint)
+                    self.model.load_state_dict(checkpoint)
             except Exception as e:
-                 print(f"Error loading STN model: {e}")
-                 self.model = None
-                 return
+                print(f"Error loading STN model: {e}")
+                self.model = None
+                return
         else:
-             print(f"STN model path not found: {model_path}")
-             self.model = None
-             return
+            print(f"STN model path not found: {model_path}")
+            self.model = None
+            return
 
         self.model.to(device)
         self.model.eval()
@@ -72,58 +73,18 @@ class STNTransformer:
         with torch.no_grad():
             Minv_pred, _ = self.model(img_tensor)
             # Minv_pred is [1, 3, 3]
-            minv = Minv_pred.squeeze(0).cpu().numpy() # This is likely for normalized coords [-1, 1]
+            minv = Minv_pred.squeeze(0).cpu().numpy()  # This is likely for normalized coords [-1, 1]
 
-        # Convert normalized homography to pixel homography for HxW image
-        # Normalization matrix N
-        # [ 2/s  0   -1 ]
-        # [  0  2/s  -1 ]
-        # [  0   0    1 ]
-        
-        N = np.array([
-            [2.0/s, 0, -1],
-            [0, 2.0/s, -1],
-            [0, 0, 1]
-        ])
-        
+        N = np.array([[2.0 / s, 0, -1], [0, 2.0 / s, -1], [0, 0, 1]])
+
         N_inv = np.linalg.inv(N)
-        
-        # M_pixel = N_inv @ M_norm @ N
-        # Note: If Minv_pred is the Inverse Matrix (Target -> Source), we accept it as is if we use warpPerspective with WARP_INVERSE_MAP
-        # Or usually warpPerspective takes H that maps Source -> Target. 
-        # The STN usually produces a grid sampler matrix which maps Target(grid) -> Source(sampling points).
-        # So Minv_pred is likely T -> S.
-        # cv2.warpPerspective(src, M, dsize) uses M to map src(x,y) -> dst(u,v). 
-        # So inputs M should be S -> T.
-        # If STN outputs T -> S, then we should use flags=cv2.WARP_INVERSE_MAP or invert the matrix.
-        
-        # Let's verify stn/utils.py logic. 
-        # It assumes Minv_pred is used with kornia.warp_perspective.
-        # kornia.warp_perspective takes M and warps tensor.
-        # "Warps a tensor by the homography matrix."
-        # Usually STNs predict theta for affine_grid, which is T -> S.
-        # If Minv_pred is T -> S.
-        
-        # Let's try to assume Minv_pred is T -> S (Inverse Homography).
-        # We need S -> T for cv2.warpPerspective.
-        # So we might need to invert it.
-        
-        # However, looking at stn/utils.py again:
-        # Minv_pred = Scale_matrix @ Minv_pred @ Scale_matrix_inv.
-        # This scales the matrix from normalized to 224x224 pixel space.
-        # So Minv_pred was in normalized space.
-        
+
         M_pixel_inv = N_inv @ minv @ N
-        
-        # We want H for cv2.warpPerspective (Source -> Target).
-        # If M_pixel_inv matches T -> S.
-        # Then H = inv(M_pixel_inv).
-        
         try:
-             H = np.linalg.inv(M_pixel_inv)
+            H = np.linalg.inv(M_pixel_inv)
         except np.linalg.LinAlgError:
-             return None
-             
+            return None
+
         return H
 
     def __call__(self, image, polygons):
@@ -136,17 +97,39 @@ class STNTransformer:
 
         h, w = image.shape[:2]
         m = max(h, w)
-        
+
         # Create padded canvas
         if len(image.shape) == 3:
             canvas = np.zeros((m, m, image.shape[2]), dtype=image.dtype)
         else:
             canvas = np.zeros((m, m), dtype=image.dtype)
         canvas[:h, :w] = image
-        
-        # Warp canvas instead of original image
-        image_warped = cv2.warpPerspective(canvas, H_mat, (m, m))
-        
+
+        # Calculate new bounds to encompass the warped image
+        corners = np.array([[0, 0], [m, 0], [m, m], [0, m]], dtype=np.float32).reshape(-1, 1, 2)
+        corners_transformed = cv2.perspectiveTransform(corners, H_mat)
+        x_min = corners_transformed[:, 0, 0].min()
+        x_max = corners_transformed[:, 0, 0].max()
+        y_min = corners_transformed[:, 0, 1].min()
+        y_max = corners_transformed[:, 0, 1].max()
+
+        # Dimensions of the bounding box
+        width = x_max - x_min
+        height = y_max - y_min
+
+        # Determine the side length of the square canvas just enough to fit
+        side = int(np.ceil(max(width, height)))
+
+        # Compute translation to center the warped image content in the square canvas
+        tx = (side - width) / 2.0 - x_min
+        ty = (side - height) / 2.0 - y_min
+
+        T = np.array([[1, 0, tx], [0, 1, ty], [0, 0, 1]])
+        H_new = T @ H_mat
+
+        # Warp canvas with new square size and centered transformation
+        image_warped = cv2.warpPerspective(canvas, H_new, (side, side))
+
         # Warp polygons
         new_polygons = []
         if polygons is not None:
@@ -154,11 +137,11 @@ class STNTransformer:
                 # poly.points is numpy (N, 2)
                 # Need to convert to (N, 1, 2) float32 for perspectiveTransform
                 pts = poly.points.reshape(-1, 1, 2).astype(np.float32)
-                transformed_pts = cv2.perspectiveTransform(pts, H_mat)
+                transformed_pts = cv2.perspectiveTransform(pts, H_new)
                 transformed_pts = transformed_pts.reshape(-1, 2)
-                
+
                 # Update polygon points
                 poly.points = transformed_pts
                 new_polygons.append(poly)
-                
+
         return image_warped, new_polygons

@@ -1,6 +1,5 @@
 import copy
 import cv2
-import torch
 import numpy as np
 from PIL import Image
 
@@ -26,7 +25,6 @@ class TextInstance(object):
 
         self.points = np.array(points)
 
-
     def __repr__(self):
         return str(self.__dict__)
 
@@ -35,26 +33,18 @@ class TextInstance(object):
 
 
 class TextDataset(object):
-
     def __init__(self, transform, is_training=False):
         super().__init__()
         self.transform = transform
         self.is_training = is_training
 
-
-
     @staticmethod
-    def make_text_region(polygon,mask):
-
-
-        cv2.fillPoly(mask, [polygon.points.astype(np.int32)], 1)    #make text_region
+    def make_text_region(polygon, mask):
+        cv2.fillPoly(mask, [polygon.points.astype(np.int32)], 1)  # make text_region
 
         return mask
 
-
-
-    def get_training_data(self, image, polygons,transcripts, image_id, image_path):
-
+    def get_training_data(self, image, polygons, transcripts, image_id, image_path):
         H, W, _ = image.shape
 
         if self.transform:
@@ -64,19 +54,18 @@ class TextDataset(object):
         dail_mask = np.zeros((image.shape[0], image.shape[1]), np.uint8)
         text_mask = np.zeros((image.shape[0], image.shape[1]), np.uint8)
 
-
         if polygons is not None:
             for i, polygon in enumerate(polygons):
-                if polygon.text == '1':
-                    pointer_mask= self.make_text_region(polygon,pointer_mask)
+                if polygon.text == "1":
+                    pointer_mask = self.make_text_region(polygon, pointer_mask)
 
-                if polygon.text == '2':
+                if polygon.text == "2":
                     dail_mask = self.make_text_region(polygon, dail_mask)
 
-                if polygon.text == 'number':
+                if polygon.text == "number":
                     text_mask = self.make_text_region(polygon, text_mask)
-                    bboxs=polygon.points.reshape((1,8))
-        
+                    bboxs = polygon.points.reshape((1, 8))
+
         # Debug statistics
         # if np.sum(pointer_mask) == 0:
         #     print(f"Warning: pointer_mask empty for {image_id}")
@@ -89,17 +78,10 @@ class TextDataset(object):
         # # to pytorch channel sequence
         image = image.transpose(2, 0, 1)
 
-        if not self.is_training:    #test condition
+        if not self.is_training:  # test condition
+            meta = {"image_id": image_id, "Height": H, "Width": W, "trans": transcripts}
 
-            meta = {
-                'image_id': image_id,
-                'Height': H,
-                'Width': W,
-                'trans':transcripts
-            }
-
-            return image, pointer_mask,dail_mask,text_mask,train_mask, meta
-
+            return image, pointer_mask, dail_mask, text_mask, train_mask, meta
 
         # image = torch.from_numpy(image).float()
         # pointer_mask = torch.from_numpy(pointer_mask).long()
@@ -112,8 +94,7 @@ class TextDataset(object):
         # mapping = torch.from_numpy(mapping).long()
         # transcripts=np.array(transcripts)
 
-        return image,  pointer_mask, dail_mask, text_mask, train_mask,bboxs,transcripts
-
+        return image, pointer_mask, dail_mask, text_mask, train_mask, bboxs, transcripts
 
     def __len__(self):
         raise NotImplementedError()

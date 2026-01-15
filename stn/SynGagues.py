@@ -19,6 +19,7 @@ COMMON_UNITS = load_units()
 def get_random_unit():
     return random.choice(COMMON_UNITS)
 
+
 def truefalse(p):
     return random.random() < p
 
@@ -148,38 +149,39 @@ def draw_rotated_text(img, text, center, angle, font, scale, color, thickness):
     img[p_y1:p_y2, p_x1:p_x2] = dst
     return img
 
+
 def draw_unit(img, unit_text, center, radius, start_angle, end_angle, font, scale, color, thickness):
     cx, cy = center
-    
+
     # Calculate the "center" of the gauge arc
     mid_angle = (start_angle + end_angle) / 2
     mid_angle = mid_angle % 360
-    
+
     # Position the unit opposite to the arc center (in the opening)
     # But slightly closer to the center than the ticks
     unit_radius_ratio = minmax(0.3, 0.5)
     unit_radius = radius * unit_radius_ratio
-    
+
     # Position angle is opposite to mid_angle
     pos_angle = mid_angle + 180
-    
+
     # Add small random jitter to position angle
     pos_angle += minmax(-10, 10)
-    
+
     rad = math.radians(pos_angle)
     tx = int(cx + unit_radius * math.cos(rad))
     ty = int(cy + unit_radius * math.sin(rad))
-    
+
     # Filter fancy fonts (6: Script Simplex, 7: Script Complex)
     if font in [6, 7]:
-        font = random.choice([0, 2, 3, 4]) # Simplex, Duplex, Complex, Triplex
-        
+        font = random.choice([0, 2, 3, 4])  # Simplex, Duplex, Complex, Triplex
+
     # Ensure thickness is visible but not too thick for small scales
     if scale < 0.5:
         thickness = 1
     else:
         thickness = max(thickness, 2)
-    
+
     # Use draw_rotated_text to align text with gauge orientation
     # Passing mid_angle ensures the text is "upright" relative to the gauge face
     img = draw_rotated_text(img, unit_text, (tx, ty), mid_angle, font, scale, color, thickness)
@@ -342,12 +344,12 @@ def gen_gauge(use_homography=True, use_artefacts=False, use_arguments=False):
 
     # numerals - 仪表盘数值标签
     num_font = intminmax(0, 7)
-    
+
     # 调整字体大小分布，减少过小字体的比例
     if truefalse(0.8):
-        num_font_scale = minmax(0.6, 1.0) # 正常/大字体
+        num_font_scale = minmax(0.6, 1.0)  # 正常/大字体
     else:
-        num_font_scale = minmax(0.4, 0.6) # 小字体 (20% 概率)
+        num_font_scale = minmax(0.4, 0.6)  # 小字体 (20% 概率)
 
     # 调整字体粗细，避免小字体过粗
     if num_font_scale < 0.55:
@@ -496,28 +498,23 @@ def gen_gauge(use_homography=True, use_artefacts=False, use_arguments=False):
         Minv = np.array([[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]]).astype(np.float32)
 
     if use_arguments:
-        r = img[:,:,0] * np.random.uniform(0.9, 1.1)
-        g = img[:,:,1] * np.random.uniform(0.9, 1.1)
-        b = img[:,:,2] * np.random.uniform(0.9, 1.1)
-        rgb = [r,g,b]
+        r = img[:, :, 0] * np.random.uniform(0.9, 1.1)
+        g = img[:, :, 1] * np.random.uniform(0.9, 1.1)
+        b = img[:, :, 2] * np.random.uniform(0.9, 1.1)
+        rgb = [r, g, b]
 
         img = np.stack(rgb, 2)
-        if truefalse(0.5): # blur
-            k = np.random.randint(1,10)
-            img = cv2.blur(img, (k,k))
-        if truefalse(0.5): # noise
+        if truefalse(0.5):  # blur
+            k = np.random.randint(1, 10)
+            img = cv2.blur(img, (k, k))
+        if truefalse(0.5):  # noise
             H, W, _ = np.shape(img)
             img = img + 10 * np.random.uniform(-1.0, 1.0, (H, W, 3))
-        if truefalse(0.5): # resize
+        if truefalse(0.5):  # resize
             sz = np.random.randint(64, 256)
             img = cv2.resize(img, (sz, sz))
 
-    return (
-        img,
-        (angle_start, angle_end, angle_pointer),
-        (start_value, end_value, reading_value),
-        Minv
-    )
+    return (img, (angle_start, angle_end, angle_pointer), (start_value, end_value, reading_value), Minv)
 
 
 if __name__ == "__main__":

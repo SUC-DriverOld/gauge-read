@@ -3,10 +3,10 @@ from torchvision.models import resnet
 import torch.utils.model_zoo as model_zoo
 
 model_urls = {
-    'resnet50': 'https://download.pytorch.org/models/resnet50-19c8e357.pth',
-    'resnet101': 'https://download.pytorch.org/models/resnet101-5d3b4d8f.pth',
-    'wide_resnet50_2': 'https://download.pytorch.org/models/wide_resnet50_2-95faca4d.pth',
-    'wide_resnet101_2': 'https://download.pytorch.org/models/wide_resnet101_2-32ee1156.pth',
+    "resnet50": "https://download.pytorch.org/models/resnet50-19c8e357.pth",
+    "resnet101": "https://download.pytorch.org/models/resnet101-5d3b4d8f.pth",
+    "wide_resnet50_2": "https://download.pytorch.org/models/wide_resnet50_2-95faca4d.pth",
+    "wide_resnet101_2": "https://download.pytorch.org/models/wide_resnet101_2-32ee1156.pth",
 }
 
 
@@ -25,12 +25,7 @@ class ResNet(nn.Module):
             print("load the {} weight from ./cache".format(name))
             base_net.load_state_dict(model_zoo.load_url(model_urls["resnet50"], model_dir="./cache"))
         # print(base_net)
-        self.stage1 = nn.Sequential(
-            base_net.conv1,
-            base_net.bn1,
-            base_net.relu,
-            base_net.maxpool
-        )
+        self.stage1 = nn.Sequential(base_net.conv1, base_net.bn1, base_net.relu, base_net.maxpool)
         self.stage2 = base_net.layer1
         self.stage3 = base_net.layer2
         self.stage4 = base_net.layer3
@@ -50,8 +45,9 @@ class ResNet(nn.Module):
         return C1, C2, C3, C4, C5
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     import torch
+
     input = torch.randn((4, 3, 512, 512))
     net = ResNet()
     C1, C2, C3, C4, C5 = net(input)

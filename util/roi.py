@@ -18,9 +18,7 @@ def roi_transform(feature, box, size=(32, 180)):
     mapped_x2, mapped_y2 = (resize_w, 0)
 
     src_pts = np.float32([(x1, y1), (x2, y2), (x4, y4)])
-    dst_pts = np.float32([
-        (mapped_x1, mapped_y1), (mapped_x2, mapped_y2), (mapped_x4, mapped_y4)
-    ])
+    dst_pts = np.float32([(mapped_x1, mapped_y1), (mapped_x2, mapped_y2), (mapped_x4, mapped_y4)])
 
     affine_matrix = cv2.getAffineTransform(src_pts.astype(np.float32), dst_pts.astype(np.float32))
     affine_matrix = param2theta(affine_matrix, width, height)
@@ -28,7 +26,6 @@ def roi_transform(feature, box, size=(32, 180)):
     affine_matrix *= 1e20  # cancel the error when type conversion
     affine_matrix = torch.tensor(affine_matrix, device=feature.device, dtype=torch.float)
     affine_matrix /= 1e20
-
 
     grid = torch.nn.functional.affine_grid(affine_matrix.unsqueeze(0), feature.unsqueeze(0).size(), align_corners=True)
     feature_rotated = torch.nn.functional.grid_sample(feature.unsqueeze(0), grid, align_corners=True)
@@ -74,6 +71,6 @@ def rgb_to_grayscale(img):
         Tensor: Grayscale image.
     """
     if img.shape[0] != 3:
-        raise TypeError('Input Image does not contain 3 Channels')
+        raise TypeError("Input Image does not contain 3 Channels")
 
     return (0.2989 * img[0] + 0.5870 * img[1] + 0.1140 * img[2]).to(img.dtype)

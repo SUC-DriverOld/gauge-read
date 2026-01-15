@@ -7,8 +7,9 @@ from shapely.geometry import Polygon
 from util.config import config as cfg
 
 
-def get_index(lista,value):
-    return [x for (x,m) in enumerate(lista) if m==value]
+def get_index(lista, value):
+    return [x for (x, m) in enumerate(lista) if m == value]
+
 
 def to_device(*tensors):
     if len(tensors) < 2:
@@ -34,7 +35,7 @@ def rescale_result(image, bbox_contours, H, W):
     ori_H, ori_W = image.shape[:2]
     image = cv2.resize(image, (W, H))
     contours = list()
-    for (cont, lines) in bbox_contours:
+    for cont, lines in bbox_contours:
         cont[:, 0] = (cont[:, 0] * W / ori_W).astype(int)
         cont[:, 1] = (cont[:, 1] * H / ori_H).astype(int)
         contours.append(cont)
@@ -44,25 +45,25 @@ def rescale_result(image, bbox_contours, H, W):
 def fill_hole(input_mask):
     h, w = input_mask.shape
     canvas = np.zeros((h + 2, w + 2), np.uint8)
-    canvas[1:h + 1, 1:w + 1] = input_mask.copy()
+    canvas[1 : h + 1, 1 : w + 1] = input_mask.copy()
 
     mask = np.zeros((h + 4, w + 4), np.uint8)
 
     cv2.floodFill(canvas, mask, (0, 0), 1)
-    canvas = canvas[1:h + 1, 1:w + 1].astype(np.bool)
+    canvas = canvas[1 : h + 1, 1 : w + 1].astype(np.bool)
 
-    return (~canvas | input_mask.astype(np.uint8))
+    return ~canvas | input_mask.astype(np.uint8)
 
 
 def regularize_sin_cos(sin, cos):
     # regularization
-    scale = np.sqrt(1.0 / (sin ** 2 + cos ** 2))
+    scale = np.sqrt(1.0 / (sin**2 + cos**2))
     return sin * scale, cos * scale
 
 
 def gaussian2D(shape, sigma=1):
-    m, n = [(ss - 1.) / 2. for ss in shape]
-    y, x = np.ogrid[-m:m + 1, -n:n + 1]
+    m, n = [(ss - 1.0) / 2.0 for ss in shape]
+    y, x = np.ogrid[-m : m + 1, -n : n + 1]
 
     h = np.exp(-(x * x + y * y) / (2 * sigma * sigma))
     h[h < np.finfo(h.dtype).eps * h.max()] = 0
@@ -80,8 +81,8 @@ def draw_gaussian(heatmap, center, radius, k=1, delte=6):
     left, right = min(x, radius), min(width - x, radius + 1)
     top, bottom = min(y, radius), min(height - y, radius + 1)
 
-    masked_heatmap = heatmap[y - top:y + bottom, x - left:x + right]
-    masked_gaussian = gaussian[radius - top:radius + bottom, radius - left:radius + right]
+    masked_heatmap = heatmap[y - top : y + bottom, x - left : x + right]
+    masked_gaussian = gaussian[radius - top : radius + bottom, radius - left : radius + right]
     np.maximum(masked_heatmap, masked_gaussian * k, out=masked_heatmap)
 
 
@@ -89,21 +90,21 @@ def gaussian_radius(det_size, min_overlap=0.7):
     height, width = det_size
 
     a1 = 1
-    b1 = (height + width)
+    b1 = height + width
     c1 = width * height * (1 - min_overlap) / (1 + min_overlap)
-    sq1 = np.sqrt(b1 ** 2 - 4 * a1 * c1)
+    sq1 = np.sqrt(b1**2 - 4 * a1 * c1)
     r1 = (b1 + sq1) / 2
 
     a2 = 4
     b2 = 2 * (height + width)
     c2 = (1 - min_overlap) * width * height
-    sq2 = np.sqrt(b2 ** 2 - 4 * a2 * c2)
+    sq2 = np.sqrt(b2**2 - 4 * a2 * c2)
     r2 = (b2 + sq2) / 2
 
     a3 = 4 * min_overlap
     b3 = -2 * min_overlap * (height + width)
     c3 = (min_overlap - 1) * width * height
-    sq3 = np.sqrt(b3 ** 2 - 4 * a3 * c3)
+    sq3 = np.sqrt(b3**2 - 4 * a3 * c3)
     r3 = (b3 + sq3) / 2
     return min(r1, r2, r3)
 
@@ -115,18 +116,19 @@ def point_dist_to_line(line, p3):
     d = p2 - p1
 
     def l2(p):
-        return math.sqrt(p[0] * p[0]+ p[1]*p[1])
+        return math.sqrt(p[0] * p[0] + p[1] * p[1])
 
     if l2(d) > 0:
         distance = abs(d[1] * p3[0] - d[0] * p3[1] + p2[0] * p1[1] - p2[1] * p1[0]) / l2(d)
     else:
-        distance = math.sqrt((p3[0]-p2[0])**2 + (p3[1]-p2[1])**2)
+        distance = math.sqrt((p3[0] - p2[0]) ** 2 + (p3[1] - p2[1]) ** 2)
 
     return distance
 
 
 class AverageMeter(object):
     """Computes and stores the average and current value"""
+
     def __init__(self):
         self.reset()
 
@@ -145,8 +147,8 @@ class AverageMeter(object):
 
 def norm2(x, axis=None):
     if axis:
-        return np.sqrt(np.sum(x ** 2, axis=axis))
-    return np.sqrt(np.sum(x ** 2))
+        return np.sqrt(np.sum(x**2, axis=axis))
+    return np.sqrt(np.sum(x**2))
 
 
 def cos(p1, p2):
@@ -168,7 +170,6 @@ def vector_cos(v):
 
 
 def find_bottom(pts):
-
     if len(pts) > 4:
         e = np.concatenate([pts, pts[:3]])
         candidate = []
@@ -183,7 +184,6 @@ def find_bottom(pts):
             mid_list = []
             dist_list = []
             if len(candidate) > 2:
-
                 bottom_idx = np.argsort([angle for s1, s2, angle in candidate])[0:2]
                 bottoms = [candidate[bottom_idx[0]][:2], candidate[bottom_idx[1]][0:2]]
                 long_edge1, long_edge2 = find_long_edges(pts, bottoms)
@@ -194,7 +194,7 @@ def find_bottom(pts):
                 len1 = len(edge_length1)
                 len2 = len(edge_length2)
 
-                if l1 > 2*l2 or l2 > 2*l1 or len1 == 0 or len2 == 0:
+                if l1 > 2 * l2 or l2 > 2 * l1 or len1 == 0 or len2 == 0:
                     for i in range(len(pts)):
                         mid_point = (e[i] + e[(i + 1) % len(pts)]) / 2
                         mid_list.append((i, (i + 1) % len(pts), mid_point))
@@ -227,9 +227,9 @@ def find_bottom(pts):
     else:
         d1 = norm2(pts[1] - pts[0]) + norm2(pts[2] - pts[3])
         d2 = norm2(pts[2] - pts[1]) + norm2(pts[0] - pts[3])
-        bottoms = [(0, 1), (2, 3)] if 2*d1 < d2 else [(1, 2), (3, 0)]
+        bottoms = [(0, 1), (2, 3)] if 2 * d1 < d2 else [(1, 2), (3, 0)]
 
-    assert len(bottoms) == 2, 'fewer than 2 bottoms'
+    assert len(bottoms) == 2, "fewer than 2 bottoms"
     return bottoms
 
 
@@ -279,7 +279,6 @@ def find_long_edges(points, bottoms):
 
 
 def split_edge_seqence(points, long_edge, n_parts):
-
     edge_length = [norm2(points[e1] - points[e2]) for e1, e2 in long_edge]
     point_cumsum = np.cumsum([0] + edge_length)
     total_length = sum(edge_length)
@@ -312,11 +311,10 @@ def split_edge_seqence(points, long_edge, n_parts):
 
 
 def split_edge_seqence_by_step(points, long_edge1, long_edge2, step=16.0):
-
     edge_length1 = [norm2(points[e1] - points[e2]) for e1, e2 in long_edge1]
     edge_length2 = [norm2(points[e1] - points[e2]) for e1, e2 in long_edge2]
     # 取长边 计算bbox个数
-    total_length = (sum(edge_length1)+sum(edge_length2))/2
+    total_length = (sum(edge_length1) + sum(edge_length2)) / 2
     n_parts = math.ceil(float(total_length) / step)
     try:
         inner1 = split_edge_seqence(points, long_edge1, n_parts=n_parts)
@@ -345,7 +343,6 @@ def disjoint_merge(x, y, F):
 
 
 def merge_polygons(polygons, merge_map):
-
     def merge_two_polygon(p1, p2):
         p2 = Polygon(p2)
         merged = p1.union(p2)
@@ -365,5 +362,3 @@ def merge_polygons(polygons, merge_map):
             final_polygons.append(np.stack([x, y], axis=1).astype(int))
 
     return final_polygons
-
-

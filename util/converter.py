@@ -1,9 +1,7 @@
 import torch
 import unicodedata as ud
 
-# keys = ' 0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ@!"#$%&\'[]()+,-./:;=?´ÉÈ'
-with open('util/codec.txt', 'r') as f:
-    keys = f.readlines()[0]
+keys = "0123456789."
 
 
 class StringLabelConverter(object):
@@ -15,11 +13,11 @@ class StringLabelConverter(object):
         ignore_case (bool, default=True): whether or not to ignore all of the case.
     """
 
-    def __init__(self, alphabet, ignore_case=False):
+    def __init__(self, alphabet=keys, ignore_case=False):
         self._ignore_case = ignore_case
         if self._ignore_case:
             alphabet = alphabet.lower()
-        self.alphabet = alphabet + '-'  # for `-1` index
+        self.alphabet = alphabet + "-"  # for `-1` index
 
         self.dict = {}
         for i, char in enumerate(alphabet):
@@ -30,7 +28,7 @@ class StringLabelConverter(object):
         length = []
         result = []
         for item in text:
-            if len(item) > 0 and 'ARABIC' in ud.name(item[0]):
+            if len(item) > 0 and "ARABIC" in ud.name(item[0]):
                 item = item[::-1]
             length.append(len(item))
             r = []
@@ -68,11 +66,10 @@ class StringLabelConverter(object):
         """
         if length.numel() == 1:
             length = length[0]
-            assert t.numel() == length, "text with length: {} does not match declared length: {}".format(t.numel(),
-                                                                                                         length)
+            assert t.numel() == length, "text with length: {} does not match declared length: {}".format(t.numel(), length)
             if raw:
-                output = ''.join([self.alphabet[i - 1] for i in t])
-                if len(output) > 0 and 'ARABIC' in ud.name(output[0]):
+                output = "".join([self.alphabet[i - 1] for i in t])
+                if len(output) > 0 and "ARABIC" in ud.name(output[0]):
                     output = output[::-1]
                 return output
             else:
@@ -81,20 +78,19 @@ class StringLabelConverter(object):
                     if t[i] != 0 and (not (i > 0 and t[i - 1] == t[i])):
                         char_list.append(self.alphabet[t[i] - 1])
 
-                output = ''.join(char_list)
-                if len(output) > 0 and 'ARABIC' in ud.name(output[0]):
+                output = "".join(char_list)
+                if len(output) > 0 and "ARABIC" in ud.name(output[0]):
                     output = output[::-1]
                 return output
         else:
             # batch mode
             assert t.numel() == length.sum(), "texts with length: {} does not match declared length: {}".format(
-                t.numel(), length.sum())
+                t.numel(), length.sum()
+            )
             texts = []
             index = 0
             for i in range(length.numel()):
                 l = length[i]
-                texts.append(
-                    self.decode(
-                        t[index:index + l], torch.LongTensor([l]), raw=raw))
+                texts.append(self.decode(t[index : index + l], torch.LongTensor([l]), raw=raw))
                 index += l
             return texts

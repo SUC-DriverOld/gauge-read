@@ -1,5 +1,6 @@
 from torch.optim.lr_scheduler import _LRScheduler
 
+
 class FixLR(_LRScheduler):
     """Sets the learning rate of each parameter group to the initial lr
     decayed by gamma every step_size epochs. When last_epoch=-1, sets
