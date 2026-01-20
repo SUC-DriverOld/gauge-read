@@ -55,7 +55,7 @@ skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "I", "N"]
-ignore = ["E501", "I001", "N806", "N803", "N999"]
+ignore = ["E501", "I001", "N806", "N803", "N999", "N812", "N802"]
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false

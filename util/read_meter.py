@@ -10,12 +10,12 @@ class MeterReader(object):
 
     def __call__(self, image, point_mask, dail_mask, word_mask, number, std_point):
         img_result = image.copy()
-        value = self.find_lines(img_result, point_mask, dail_mask, number, std_point)
+        value = self.find_lines(img_result, point_mask, dail_mask, word_mask, number, std_point)
         print("value", value)
 
         return value
 
-    def find_lines(self, ori_img, pointer_mask, dail_mask, number, std_point):
+    def find_lines(self, ori_img, pointer_mask, dail_mask, word_mask, number, std_point):
         # 实施骨架算法
         pointer_skeleton = morphology.skeletonize(pointer_mask)
         pointer_edges = pointer_skeleton * 255
@@ -29,6 +29,16 @@ class MeterReader(object):
         # cv2.imshow("dail_edges", dail_edges)
         # cv2.waitKey(0)
 
+        # Draw masks for visualization (Red for pointer, Green for dial)
+        # Create colored overlays
+        colored_masks = np.zeros_like(ori_img)
+        colored_masks[pointer_mask > 0] = [0, 0, 255]  # Red for pointer
+        colored_masks[dail_mask > 0] = [0, 255, 0]     # Green for dial
+        colored_masks[word_mask > 0] = [255, 0, 0]     # Blue for word
+        
+        # Blend overlay with original image
+        ori_img = cv2.addWeighted(ori_img, 1.0, colored_masks, 0.5, 0)
+
         pointer_lines = cv2.HoughLinesP(pointer_edges, 1, np.pi / 180, 10, np.array([]), minLineLength=10, maxLineGap=400)
         coin1, coin2 = None, None
 
@@ -40,8 +50,21 @@ class MeterReader(object):
         except TypeError:
             return "can not detect pointer"
 
+        # Default center (image center)
         h, w, _ = ori_img.shape
         center = (0.5 * w, 0.5 * h)
+
+        # Try to calculate a better center using geometry:
+        # Intersection of pointer line and the perpendicular bisector of the two scale points
+        if std_point is not None:
+             geo_center = self.calculate_center_from_geometry(std_point, (coin1, coin2))
+             if geo_center is not None:
+                 # Sanity check: Center should be reasonably close to image area
+                 if -w < geo_center[0] < 2*w and -h < geo_center[1] < 2*h:
+                     center = geo_center
+                     # Draw calculated center
+                     cv2.circle(ori_img, center, 5, (0, 255, 255), -1)
+
         dis1 = (coin1[0] - center[0]) ** 2 + (coin1[1] - center[1]) ** 2
         dis2 = (coin2[0] - center[1]) ** 2 + (coin2[1] - center[1]) ** 2
         if dis1 <= dis2:
@@ -126,6 +149,47 @@ class MeterReader(object):
         cv2.waitKey(0)
 
         return value
+
+    def calculate_center_from_geometry(self, std_point, pointer_line):
+        """
+        Calculate center based on the assumption that:
+        1. The perpendicular bisector of the two scale points (start and end of dial) passes through the center.
+        2. The line extension of the pointer passes through the center.
+        intersection of these two lines is the center.
+        """
+        p1 = np.array(std_point[0])
+        p2 = np.array(std_point[1])
+        
+        # Midpoint of the two scale points
+        mid_scale = (p1 + p2) / 2
+        
+        # Vector of the chord connecting the two scale points
+        chord_vec = p2 - p1
+        
+        # Perpendicular vector to the chord (rotate 90 degrees)
+        perp_vec = np.array([-chord_vec[1], chord_vec[0]])
+        
+        # Line 1: Perpendicular bisector defined by point 'mid_scale' and direction 'perp_vec'
+        # L1(t) = mid_scale + t * perp_vec
+        
+        # Line 2: Pointer line defined by point 'pointer_line[0]' and direction 'pointer_vec'
+        ptr_p1 = np.array(pointer_line[0])
+        ptr_p2 = np.array(pointer_line[1])
+        pointer_vec = ptr_p2 - ptr_p1
+        
+        # Solve for intersection
+        # mid_scale + t * perp_vec = ptr_p1 + u * pointer_vec
+        # t * perp_vec - u * pointer_vec = ptr_p1 - mid_scale
+        
+        A = np.array([perp_vec, -pointer_vec]).T
+        b = ptr_p1 - mid_scale
+        
+        try:
+            x = np.linalg.solve(A, b) # x = [t, u]
+            center = mid_scale + x[0] * perp_vec
+            return (int(center[0]), int(center[1]))
+        except np.linalg.LinAlgError:
+            return None # Parallel lines or other singularity
 
     def get_distance_point2line(self, point, line):
         """
