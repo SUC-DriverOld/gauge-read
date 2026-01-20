@@ -6,7 +6,7 @@
         "num_workers": 0
     },
     "Experiment": {
-        "exp_name": "meter_data_stn",
+        "exp_name": "meter_data_multimodal",
         "save_dir": "logs",
         "vis_dir": "./vis/",
         "output_dir": "output",
@@ -16,6 +16,7 @@
     },
     "Model": {
         "net": "vgg",
+        "use_multimodal": true,
         "rescale": 255.0,
         "means": [0.485, 0.456, 0.406],
         "stds": [0.229, 0.224, 0.225]

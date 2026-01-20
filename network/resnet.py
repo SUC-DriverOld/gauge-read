@@ -11,7 +11,7 @@ model_urls = {
 
 
 class ResNet(nn.Module):
-    def __init__(self, name="resnet50", pretrain=True):
+    def __init__(self, name="resnet50", pretrain=True, input_channels=3):
         super().__init__()
 
         if name == "resnet50":
@@ -24,6 +24,22 @@ class ResNet(nn.Module):
         if pretrain:
             print("load the {} weight from ./pretrain".format(name))
             base_net.load_state_dict(model_zoo.load_url(model_urls["resnet50"], model_dir="./pretrain"))
+            
+        # Modify first layer for 4 channels
+        if input_channels == 4:
+            old_conv = base_net.conv1
+            new_conv = nn.Conv2d(4, old_conv.out_channels, 
+                                 kernel_size=old_conv.kernel_size, 
+                                 stride=old_conv.stride, 
+                                 padding=old_conv.padding, 
+                                 bias=old_conv.bias)
+                                 
+            with torch.no_grad():
+                new_conv.weight[:, :3, :, :] = old_conv.weight
+                new_conv.weight[:, 3:, :, :] = torch.mean(old_conv.weight, dim=1, keepdim=True)
+                
+            base_net.conv1 = new_conv
+            
         # print(base_net)
         self.stage1 = nn.Sequential(base_net.conv1, base_net.bn1, base_net.relu, base_net.maxpool)
         self.stage2 = base_net.layer1

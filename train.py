@@ -7,6 +7,7 @@ import torch.backends.cudnn as cudnn
 import torch.utils.data as data
 from torch.optim import lr_scheduler
 from tensorboardX import SummaryWriter
+from tqdm import tqdm
 from dataset import Meter
 from network.loss import TextLoss
 from network.textnet import TextNet
@@ -55,7 +56,8 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer):
     model.train()
     # scheduler.step()
 
-    for i, (img, pointer_mask, dail_mask, text_mask, train_mask, transcripts, bboxs, mapping) in enumerate(train_loader):
+    pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch}")
+    for i, (img, pointer_mask, dail_mask, text_mask, train_mask, transcripts, bboxs, mapping) in pbar:
         data_time.update(time.time() - end)
 
         train_step += 1
@@ -95,15 +97,16 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer):
             writer.add_scalar("Train/LR", scheduler.get_last_lr()[0], train_step)
             writer.flush()
 
-        if i % cfg.display_freq == 0:
-            print(
-                "({:d} / {:d})  Loss: {:.4f}  pointer_loss: {:.4f}  dail_loss: {:.4f}  text_loss: {:.4f} rec_loss: {:.4f}   ".format(
-                    i, len(train_loader), loss.item(), loss_pointer.item(), loss_dail.item(), loss_text.item(), loss_rec.item()
-                )
-            )
+        pbar.set_postfix({
+            "Loss": f"{loss.item():.4f}",
+            "Ptr": f"{loss_pointer.item():.4f}",
+            "Dial": f"{loss_dail.item():.4f}",
+            "Txt": f"{loss_text.item():.4f}",
+            "Rec": f"{loss_rec.item():.4f}",
+        })
 
     if epoch % cfg.save_freq == 0:
-        save_model(model, epoch, scheduler.get_lr(), optimizer)
+        save_model(model, epoch, scheduler.get_last_lr()[0], optimizer)
 
     print("Training Loss: {}".format(losses.avg))
 

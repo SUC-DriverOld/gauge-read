@@ -10,6 +10,41 @@ from util.converter import keys
 from util.misc import to_device
 import cv2
 from util.tool import order_points
+from util.config import config as cfg
+
+
+class TorchBlackHatModule(nn.Module):
+    def __init__(self, kernel_size=15):
+        super().__init__()
+        self.kernel_size = kernel_size
+        self.pad = kernel_size // 2
+
+    def get_gray(self, x):
+        # x is (B, 3, H, W). Assumed to be somewhat normalized.
+        # Simple average to get intensity if color weights aren't critical
+        return torch.mean(x, dim=1, keepdim=True)
+
+    def forward(self, x):
+        # Helper for dilation with replicate pad to avoid border artifacts
+        def morph_dilation(tensor):
+            padded = F.pad(tensor, (self.pad, self.pad, self.pad, self.pad), mode='replicate')
+            return F.max_pool2d(padded, self.kernel_size, stride=1, padding=0)
+
+        def morph_erosion(tensor):
+            return -morph_dilation(-tensor)
+
+        # 1. Convert to Gray
+        gray = self.get_gray(x)
+        
+        # 2. Black Hat: Closed - Original
+        # Closing = Erosion(Dilation(img))
+        dilated = morph_dilation(gray)
+        closed = morph_erosion(dilated)
+        
+        black_hat = closed - gray
+        
+        # 3. Expand to 3 channels for backbone compatibility
+        return black_hat # Returns 1 channel (B, 1, H, W)
 
 
 class UpBlok(nn.Module):
@@ -30,19 +65,21 @@ class UpBlok(nn.Module):
 
 
 class FPN(nn.Module):
-    def __init__(self, backbone="vgg_bn", is_training=True):
+    def __init__(self, backbone="vgg_bn", is_training=True, use_multimodal=False):
         super().__init__()
 
         self.is_training = is_training
         self.backbone_name = backbone
         self.class_channel = 6
         self.reg_channel = 2
+        
+        input_channels = 4 if use_multimodal else 3
 
         if backbone == "vgg" or backbone == "vgg_bn":
             if backbone == "vgg_bn":
-                self.backbone = VggNet(name="vgg16_bn", pretrain=True)
+                self.backbone = VggNet(name="vgg16_bn", pretrain=True, input_channels=input_channels)
             elif backbone == "vgg":
-                self.backbone = VggNet(name="vgg16", pretrain=True)
+                self.backbone = VggNet(name="vgg16", pretrain=True, input_channels=input_channels)
 
             self.deconv5 = nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1)
             self.merge4 = UpBlok(512 + 256, 128)
@@ -52,9 +89,9 @@ class FPN(nn.Module):
 
         elif backbone == "resnet50" or backbone == "resnet101":
             if backbone == "resnet101":
-                self.backbone = ResNet(name="resnet101", pretrain=True)
+                self.backbone = ResNet(name="resnet101", pretrain=True, input_channels=input_channels)
             elif backbone == "resnet50":
-                self.backbone = ResNet(name="resnet50", pretrain=True)
+                self.backbone = ResNet(name="resnet50", pretrain=True, input_channels=input_channels)
 
             self.deconv5 = nn.ConvTranspose2d(2048, 256, kernel_size=4, stride=2, padding=1)
             self.merge4 = UpBlok(1024 + 256, 256)
@@ -67,6 +104,7 @@ class FPN(nn.Module):
     def forward(self, x):
         C1, C2, C3, C4, C5 = self.backbone(x)
 
+        # 4. FPN Upsampling
         up5 = self.deconv5(C5)
         up5 = F.relu(up5)
 
@@ -87,10 +125,13 @@ class FPN(nn.Module):
 class TextNet(nn.Module):
     def __init__(self, backbone="vgg", is_training=True):
         super().__init__()
+        
+        self.use_multimodal = cfg.get("use_multimodal", False)
+        print(f"TextNet Multimodal Status: {self.use_multimodal}")
 
         self.is_training = is_training
         self.backbone_name = backbone
-        self.fpn = FPN(self.backbone_name, self.is_training)
+        self.fpn = FPN(self.backbone_name, self.is_training, use_multimodal=self.use_multimodal)
 
         # ##class and regression branch
         self.out_channel = 3
@@ -98,17 +139,26 @@ class TextNet(nn.Module):
 
         num_class = len(keys) + 1
         self.recognizer = Recognizer(num_class)
+        
+        if self.use_multimodal:
+            self.blackhat_gen = TorchBlackHatModule()
+        else:
+            self.blackhat_gen = None
 
-    def load_model(self, model_path):
-        print("Loading from {}".format(model_path))
-        state_dict = torch.load(model_path)
-        self.load_state_dict(state_dict["model"])
+    def forward(self, x_input, boxes=None, mapping=None):
+        # 1. Handle Multimodal Input
+        if self.use_multimodal:
+            with torch.no_grad():
+                 aux = self.blackhat_gen(x_input) # (B, 1, H, W)
+            # Concatenate for 4-channel input
+            x = torch.cat([x_input, aux], dim=1)
+        else:
+            x = x_input 
 
-    def forward(self, x, boxes, mapping):
         up1, up2, up3, up4, up5 = self.fpn(x)
         predict_out = self.predict(up1)
 
-        rois = batch_roi_transform(x, boxes[:, :8], mapping)
+        rois = batch_roi_transform(x_input, boxes[:, :8], mapping) # Note: Use original x_input (3ch) for ROI extract if needed, or update ROI transform
 
         # print("rois",rois.shape)
         preds = self.recognizer(rois)
@@ -120,7 +170,16 @@ class TextNet(nn.Module):
 
         return predict_out, (preds, preds_size)
 
-    def forward_test(self, x):
+    def forward_test(self, x_input):
+        # 1. Handle Multimodal Input
+        if self.use_multimodal:
+            with torch.no_grad():
+                 aux = self.blackhat_gen(x_input) # (B, 1, H, W)
+            # Concatenate for 4-channel input
+            x = torch.cat([x_input, aux], dim=1)
+        else:
+            x = x_input
+
         up1, up2, up3, up4, up5 = self.fpn(x)
         output = self.predict(up1)
         # print("predict_out",output.shape)

@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
 import torchvision.models as models
@@ -13,7 +14,7 @@ model_urls = {
 
 
 class VggNet(nn.Module):
-    def __init__(self, name="vgg16", pretrain=True):
+    def __init__(self, name="vgg16", pretrain=True, input_channels=3):
         super().__init__()
         if name == "vgg16":
             base_net = models.vgg16(pretrained=False)
@@ -24,6 +25,22 @@ class VggNet(nn.Module):
         if pretrain:
             print("load the {} weight from ./pretrain".format(name))
             base_net.load_state_dict(model_zoo.load_url(model_urls[name], model_dir="./pretrain"))
+
+        # Modify first layer to accept 4 channels (RGB + Saliency)
+        if input_channels == 4:
+            original_conv = base_net.features[0]
+            new_conv = nn.Conv2d(4, original_conv.out_channels, 
+                                 kernel_size=original_conv.kernel_size, 
+                                 stride=original_conv.stride, 
+                                 padding=original_conv.padding)
+            
+            with torch.no_grad():
+                new_conv.weight[:, :3, :, :] = original_conv.weight
+                # Initialize 4th channel with mean of RGB weights
+                new_conv.weight[:, 3:, :, :] = torch.mean(original_conv.weight, dim=1, keepdim=True)
+                new_conv.bias = original_conv.bias
+                
+            base_net.features[0] = new_conv
 
         if name == "vgg16":
             self.stage1 = nn.Sequential(*[base_net.features[layer] for layer in range(0, 5)])
