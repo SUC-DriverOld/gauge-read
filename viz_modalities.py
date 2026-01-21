@@ -2,22 +2,6 @@ import cv2
 import numpy as np
 import os
 
-def get_edge_modality(img):
-    """
-    生成结构化边缘模态 (Structured Edge Modality)
-    使用 Canny 边缘检测提取高频几何特征（指针、刻度）
-    """
-    # 转灰度
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
-    # 高斯模糊降噪 (可选，防止噪点被识别为边缘)
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    
-    # Canny 边缘检测
-    # 阈值可以根据具体仪表图像调整，这里使用经验值
-    edges = cv2.Canny(blurred, 50, 150)
-    
-    return edges
 
 def get_saliency_modality(img):
     """
@@ -55,7 +39,7 @@ def main():
         print(f"在 {image_dir} 中没有找到图片")
         return
         
-    image_path = os.path.join(image_dir, files[0]) 
+    image_path = os.path.join(image_dir, files[1]) 
     print(f"正在处理图片: {image_path}")
 
     # 读取图片
@@ -64,8 +48,6 @@ def main():
         print("图片读取失败")
         return
 
-    # 1. 生成边缘模态
-    edge = get_edge_modality(original)
     
     # 2. 生成显著性模态
     saliency = get_saliency_modality(original)
@@ -73,7 +55,6 @@ def main():
     # --- 可视化拼接 ---
     
     # 将单通道图转回 3 通道 BGR 以便拼接
-    edge_bgr = cv2.cvtColor(edge, cv2.COLOR_GRAY2BGR)
     saliency_bgr = cv2.cvtColor(saliency, cv2.COLOR_GRAY2BGR)
 
     # 缩放以保持一致性 (这里不做 Resize，假设原图大小一致)
@@ -81,11 +62,10 @@ def main():
 
     # 添加文字标签
     cv2.putText(original, "Original (RGB)", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-    cv2.putText(edge_bgr, "Edge (Canny)", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-    cv2.putText(saliency_bgr, "Black Pointer (BlackHat)", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+    cv2.putText(saliency_bgr, "BlackHat", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
 
     # 水平拼接
-    combined = np.hstack([original, edge_bgr, saliency_bgr])
+    combined = np.hstack([original, saliency_bgr])
     
     # 如果图片太大，缩放显示
     view_scale = 1.0

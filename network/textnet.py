@@ -138,7 +138,7 @@ class TextNet(nn.Module):
         self.predict = nn.Sequential(nn.Conv2d(32, self.out_channel, kernel_size=1, stride=1, padding=0))
 
         num_class = len(keys) + 1
-        self.recognizer = Recognizer(num_class)
+        self.recognizer = Recognizer(num_class, nc=4 if self.use_multimodal else 1)
         
         if self.use_multimodal:
             self.blackhat_gen = TorchBlackHatModule()
@@ -158,7 +158,7 @@ class TextNet(nn.Module):
         up1, up2, up3, up4, up5 = self.fpn(x)
         predict_out = self.predict(up1)
 
-        rois = batch_roi_transform(x_input, boxes[:, :8], mapping) # Note: Use original x_input (3ch) for ROI extract if needed, or update ROI transform
+        rois = batch_roi_transform(x, boxes[:, :8], mapping)
 
         # print("rois",rois.shape)
         preds = self.recognizer(rois)
@@ -283,9 +283,9 @@ class TextNet(nn.Module):
 
 
 class Recognizer(nn.Module):
-    def __init__(self, nclass):
+    def __init__(self, nclass, nc=1):
         super().__init__()
-        self.crnn = CRNN(32, 1, nclass, 256)
+        self.crnn = CRNN(32, nc, nclass, 256)
 
     def forward(self, rois):
         return self.crnn(rois)

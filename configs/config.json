@@ -6,7 +6,7 @@
         "num_workers": 0
     },
     "Experiment": {
-        "exp_name": "meter_data_multimodal",
+        "exp_name": "meter_data_multimodal_4",
         "save_dir": "logs",
         "vis_dir": "./vis/",
         "output_dir": "output",
