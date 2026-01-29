@@ -86,7 +86,7 @@ for index in image_list:
                 output["text"],
                 output["reco"],
                 output["std"],
-                output["aux"]
+                output["aux"],
             )
 
             if aux_map is not None:

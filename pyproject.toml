@@ -24,6 +24,8 @@ dependencies = [
     "easydict>=1.13",
     "shapely>=2.1.2",
     "seaborn>=0.13.2",
+    "gradio>=6.5.0",
+    "pywebview>=6.1",
 ]
 
 [tool.uv.sources]
@@ -55,7 +57,7 @@ skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "I", "N"]
-ignore = ["E501", "I001", "N806", "N803", "N999", "N812", "N802"]
+ignore = ["E501", "I001", "N806", "N803", "N999", "N812", "N802", "E402"]
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false

@@ -32,8 +32,8 @@ def roi_transform(feature, box, size=(32, 180)):
     feature_rotated = feature_rotated[:, :, 0:resize_h, 0:resize_w]
 
     feature_rotated = feature_rotated.squeeze(0)
-    
-    # Compatibility handling: 
+
+    # Compatibility handling:
     # If 3 channels (RGB), convert to Grayscale (1 channel) for original CRNN.
     # If 4 channels (Multimodal), keep all channels.
     if feature_rotated.shape[0] == 3:

@@ -1,6 +1,10 @@
 import cv2
 import numpy as np
 import os
+import sys
+
+# Add project root to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def get_saliency_modality(img):
@@ -10,36 +14,37 @@ def get_saliency_modality(img):
     """
     # 转灰度
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    
+
     # 定义结构元素。核大小决定了能提取多粗的线条。
     # 假设指针宽度适中，15x15 的核通常能很好地捕捉指针和文字，同时忽略大面积背景阴影
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 15))
-    
+
     # 黑帽运算：闭运算 - 原图
     # 专门用于提取比邻域更暗的图像区域（如白色表盘上的黑色指针）
     black_hat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
-    
+
     # 增强可见性：归一化拉伸对比度，让提取出的特征更亮
     s_enhanced = cv2.normalize(black_hat, None, 0, 255, cv2.NORM_MINMAX)
-    
+
     return s_enhanced.astype(np.uint8)
+
 
 def main():
     # 默认图片路径，你可以修改为你自己的图片
     image_dir = r"e:\vs\gauge-read\datas\demo"
     output_dir = r"e:\vs\gauge-read"
-    
+
     # 获取目录下的第一张 jpg 图片
     if not os.path.exists(image_dir):
         print(f"目录不存在: {image_dir}")
         return
 
-    files = [f for f in os.listdir(image_dir) if f.lower().endswith(('.jpg', '.png', '.jpeg', '.bmp'))]
+    files = [f for f in os.listdir(image_dir) if f.lower().endswith((".jpg", ".png", ".jpeg", ".bmp"))]
     if not files:
         print(f"在 {image_dir} 中没有找到图片")
         return
-        
-    image_path = os.path.join(image_dir, files[1]) 
+
+    image_path = os.path.join(image_dir, files[1])
     print(f"正在处理图片: {image_path}")
 
     # 读取图片
@@ -48,12 +53,11 @@ def main():
         print("图片读取失败")
         return
 
-    
     # 2. 生成显著性模态
     saliency = get_saliency_modality(original)
 
     # --- 可视化拼接 ---
-    
+
     # 将单通道图转回 3 通道 BGR 以便拼接
     saliency_bgr = cv2.cvtColor(saliency, cv2.COLOR_GRAY2BGR)
 
@@ -66,7 +70,7 @@ def main():
 
     # 水平拼接
     combined = np.hstack([original, saliency_bgr])
-    
+
     # 如果图片太大，缩放显示
     view_scale = 1.0
     if combined.shape[1] > 1800:
@@ -86,6 +90,7 @@ def main():
     output_path = os.path.join(output_dir, "modalities_preview.jpg")
     cv2.imwrite(output_path, combined)
     print(f"对比图已保存至: {output_path}")
+
 
 if __name__ == "__main__":
     main()

@@ -11,14 +11,14 @@ import time
 
 
 class Detector(object):
-    def __init__(self):
+    def __init__(self, weights=None):
         self.img_size = 640
         self.threshold = 0.6
         self.max_frame = 160
+        self.weights = weights if weights else "pretrain/best.pt"
         self.init_model()
 
     def init_model(self):
-        self.weights = "pretrain/best.pt"
         self.device = "0" if torch.cuda.is_available() else "cpu"
         self.device = select_device(self.device)
         model = attempt_load(self.weights, map_location=self.device)

@@ -27,7 +27,7 @@ class TorchBlackHatModule(nn.Module):
     def forward(self, x):
         # Helper for dilation with replicate pad to avoid border artifacts
         def morph_dilation(tensor):
-            padded = F.pad(tensor, (self.pad, self.pad, self.pad, self.pad), mode='replicate')
+            padded = F.pad(tensor, (self.pad, self.pad, self.pad, self.pad), mode="replicate")
             return F.max_pool2d(padded, self.kernel_size, stride=1, padding=0)
 
         def morph_erosion(tensor):
@@ -35,16 +35,16 @@ class TorchBlackHatModule(nn.Module):
 
         # 1. Convert to Gray
         gray = self.get_gray(x)
-        
+
         # 2. Black Hat: Closed - Original
         # Closing = Erosion(Dilation(img))
         dilated = morph_dilation(gray)
         closed = morph_erosion(dilated)
-        
+
         black_hat = closed - gray
-        
+
         # 3. Expand to 3 channels for backbone compatibility
-        return black_hat # Returns 1 channel (B, 1, H, W)
+        return black_hat  # Returns 1 channel (B, 1, H, W)
 
 
 class UpBlok(nn.Module):
@@ -72,7 +72,7 @@ class FPN(nn.Module):
         self.backbone_name = backbone
         self.class_channel = 6
         self.reg_channel = 2
-        
+
         input_channels = 4 if use_multimodal else 3
 
         if backbone == "vgg" or backbone == "vgg_bn":
@@ -125,7 +125,7 @@ class FPN(nn.Module):
 class TextNet(nn.Module):
     def __init__(self, backbone="vgg", is_training=True):
         super().__init__()
-        
+
         self.use_multimodal = cfg.get("use_multimodal", False)
         print(f"TextNet Multimodal Status: {self.use_multimodal}")
 
@@ -139,7 +139,7 @@ class TextNet(nn.Module):
 
         num_class = len(keys) + 1
         self.recognizer = Recognizer(num_class, nc=4 if self.use_multimodal else 1)
-        
+
         if self.use_multimodal:
             self.blackhat_gen = TorchBlackHatModule()
         else:
@@ -154,11 +154,11 @@ class TextNet(nn.Module):
         # 1. Handle Multimodal Input
         if self.use_multimodal:
             with torch.no_grad():
-                 aux = self.blackhat_gen(x_input) # (B, 1, H, W)
+                aux = self.blackhat_gen(x_input)  # (B, 1, H, W)
             # Concatenate for 4-channel input
             x = torch.cat([x_input, aux], dim=1)
         else:
-            x = x_input 
+            x = x_input
 
         up1, up2, up3, up4, up5 = self.fpn(x)
         predict_out = self.predict(up1)
@@ -179,7 +179,7 @@ class TextNet(nn.Module):
         # 1. Handle Multimodal Input
         if self.use_multimodal:
             with torch.no_grad():
-                 aux = self.blackhat_gen(x_input) # (B, 1, H, W)
+                aux = self.blackhat_gen(x_input)  # (B, 1, H, W)
             # Concatenate for 4-channel input
             x = torch.cat([x_input, aux], dim=1)
         else:
@@ -272,10 +272,10 @@ class TextNet(nn.Module):
         else:
             preds = None
             preds_size = None
-        
+
         # Prepare auxiliary map for visualization if it exists
         aux_map = None
-        if self.use_multimodal and 'aux' in locals():
+        if self.use_multimodal and "aux" in locals():
             # aux is (B, 1, H, W). Take 0th in batch, 0th channel
             aux_map = aux[0, 0].cpu().numpy()
             aux_map = (aux_map * 255).astype(np.uint8)

@@ -29,17 +29,20 @@ class VggNet(nn.Module):
         # Modify first layer to accept 4 channels (RGB + Saliency)
         if input_channels == 4:
             original_conv = base_net.features[0]
-            new_conv = nn.Conv2d(4, original_conv.out_channels, 
-                                 kernel_size=original_conv.kernel_size, 
-                                 stride=original_conv.stride, 
-                                 padding=original_conv.padding)
-            
+            new_conv = nn.Conv2d(
+                4,
+                original_conv.out_channels,
+                kernel_size=original_conv.kernel_size,
+                stride=original_conv.stride,
+                padding=original_conv.padding,
+            )
+
             with torch.no_grad():
                 new_conv.weight[:, :3, :, :] = original_conv.weight
                 # Initialize 4th channel with mean of RGB weights
                 new_conv.weight[:, 3:, :, :] = torch.mean(original_conv.weight, dim=1, keepdim=True)
                 new_conv.bias = original_conv.bias
-                
+
             base_net.features[0] = new_conv
 
         if name == "vgg16":

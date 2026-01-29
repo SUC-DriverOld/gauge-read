@@ -8,6 +8,64 @@ class MeterReader(object):
     def __init__(self):
         pass
 
+    def compute_reading(self, std_points, pointer_line, start_val=0.0, end_val=0.0):
+        """
+        Compute the reading value based on scale points and pointer line.
+
+        Args:
+            std_points: List of two points [(x1, y1), (x2, y2)] representing start and end of scale.
+            pointer_line: List of two points [(root_x, root_y), (tip_x, tip_y)] representing the pointer.
+            start_val: The numeric value at std_points[0].
+            end_val: The numeric value at std_points[1].
+
+        Returns:
+            float: The calculated reading value.
+        """
+        if not std_points or len(std_points) < 2:
+            return start_val
+        if not pointer_line or len(pointer_line) < 2:
+            return start_val
+
+        p1 = np.array(std_points[0])
+        p2 = np.array(std_points[1])
+        ptr_root = np.array(pointer_line[0])
+        ptr_tip = np.array(pointer_line[1])
+
+        # Calculate Center
+        center_coords = self.calculate_center_from_geometry(std_points, pointer_line)
+
+        if center_coords is None:
+            center = ptr_root
+        else:
+            center = np.array(center_coords)
+
+        # Helper for angle (using arctan2 for robustness)
+        def get_angle(pt, c):
+            return np.arctan2(pt[1] - c[1], pt[0] - c[0]) * 180 / np.pi
+
+        ang_start = get_angle(p1, center)
+        ang_end = get_angle(p2, center)
+        ang_ptr = get_angle(ptr_tip, center)
+
+        # Helper for positive angle difference
+        def diff_angle(target, base):
+            d = target - base
+            if d < 0:
+                d += 360
+            return d
+
+        total_angle = diff_angle(ang_end, ang_start)
+        ptr_angle = diff_angle(ang_ptr, ang_start)
+
+        if total_angle < 1e-3:
+            return start_val
+
+        ratio = ptr_angle / total_angle
+        val_span = end_val - start_val
+        reading = start_val + (ratio * val_span)
+
+        return float(f"{reading:.4f}"), float(f"{ratio:.4f}")
+
     def __call__(self, image, point_mask, dail_mask, word_mask, number, std_point):
         img_result = image.copy()
         value = self.find_lines(img_result, point_mask, dail_mask, word_mask, number, std_point)
@@ -33,9 +91,9 @@ class MeterReader(object):
         # Create colored overlays
         colored_masks = np.zeros_like(ori_img)
         colored_masks[pointer_mask > 0] = [0, 0, 255]  # Red for pointer
-        colored_masks[dail_mask > 0] = [0, 255, 0]     # Green for dial
-        colored_masks[word_mask > 0] = [255, 0, 0]     # Blue for word
-        
+        colored_masks[dail_mask > 0] = [0, 255, 0]  # Green for dial
+        colored_masks[word_mask > 0] = [255, 0, 0]  # Blue for word
+
         # Blend overlay with original image
         ori_img = cv2.addWeighted(ori_img, 1.0, colored_masks, 0.5, 0)
 
@@ -57,13 +115,13 @@ class MeterReader(object):
         # Try to calculate a better center using geometry:
         # Intersection of pointer line and the perpendicular bisector of the two scale points
         if std_point is not None:
-             geo_center = self.calculate_center_from_geometry(std_point, (coin1, coin2))
-             if geo_center is not None:
-                 # Sanity check: Center should be reasonably close to image area
-                 if -w < geo_center[0] < 2*w and -h < geo_center[1] < 2*h:
-                     center = geo_center
-                     # Draw calculated center
-                     cv2.circle(ori_img, center, 5, (0, 255, 255), -1)
+            geo_center = self.calculate_center_from_geometry(std_point, (coin1, coin2))
+            if geo_center is not None:
+                # Sanity check: Center should be reasonably close to image area
+                if -w < geo_center[0] < 2 * w and -h < geo_center[1] < 2 * h:
+                    center = geo_center
+                    # Draw calculated center
+                    cv2.circle(ori_img, center, 5, (0, 255, 255), -1)
 
         dis1 = (coin1[0] - center[0]) ** 2 + (coin1[1] - center[1]) ** 2
         dis2 = (coin2[0] - center[1]) ** 2 + (coin2[1] - center[1]) ** 2
@@ -159,37 +217,37 @@ class MeterReader(object):
         """
         p1 = np.array(std_point[0])
         p2 = np.array(std_point[1])
-        
+
         # Midpoint of the two scale points
         mid_scale = (p1 + p2) / 2
-        
+
         # Vector of the chord connecting the two scale points
         chord_vec = p2 - p1
-        
+
         # Perpendicular vector to the chord (rotate 90 degrees)
         perp_vec = np.array([-chord_vec[1], chord_vec[0]])
-        
+
         # Line 1: Perpendicular bisector defined by point 'mid_scale' and direction 'perp_vec'
         # L1(t) = mid_scale + t * perp_vec
-        
+
         # Line 2: Pointer line defined by point 'pointer_line[0]' and direction 'pointer_vec'
         ptr_p1 = np.array(pointer_line[0])
         ptr_p2 = np.array(pointer_line[1])
         pointer_vec = ptr_p2 - ptr_p1
-        
+
         # Solve for intersection
         # mid_scale + t * perp_vec = ptr_p1 + u * pointer_vec
         # t * perp_vec - u * pointer_vec = ptr_p1 - mid_scale
-        
+
         A = np.array([perp_vec, -pointer_vec]).T
         b = ptr_p1 - mid_scale
-        
+
         try:
-            x = np.linalg.solve(A, b) # x = [t, u]
+            x = np.linalg.solve(A, b)  # x = [t, u]
             center = mid_scale + x[0] * perp_vec
             return (int(center[0]), int(center[1]))
         except np.linalg.LinAlgError:
-            return None # Parallel lines or other singularity
+            return None  # Parallel lines or other singularity
 
     def get_distance_point2line(self, point, line):
         """

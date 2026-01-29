@@ -22,6 +22,6 @@ class TextDetector(object):
             "text": text_pred,
             "reco": pred_recog,
             "std": std_points,
-            "aux": aux_map
+            "aux": aux_map,
         }
         return output

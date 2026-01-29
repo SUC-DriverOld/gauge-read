@@ -97,13 +97,15 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer):
             writer.add_scalar("Train/LR", scheduler.get_last_lr()[0], train_step)
             writer.flush()
 
-        pbar.set_postfix({
-            "Loss": f"{loss.item():.4f}",
-            "Ptr": f"{loss_pointer.item():.4f}",
-            "Dial": f"{loss_dail.item():.4f}",
-            "Txt": f"{loss_text.item():.4f}",
-            "Rec": f"{loss_rec.item():.4f}",
-        })
+        pbar.set_postfix(
+            {
+                "Loss": f"{loss.item():.4f}",
+                "Ptr": f"{loss_pointer.item():.4f}",
+                "Dial": f"{loss_dail.item():.4f}",
+                "Txt": f"{loss_text.item():.4f}",
+                "Rec": f"{loss_rec.item():.4f}",
+            }
+        )
 
     if epoch % cfg.save_freq == 0:
         save_model(model, epoch, scheduler.get_last_lr()[0], optimizer)

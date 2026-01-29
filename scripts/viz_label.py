@@ -1,5 +1,11 @@
 import numpy as np
 import cv2
+import sys
+import os
+
+# Add project root to path
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from util.augmentation import Augmentation
 import time
 from dataset.meter_data import Meter
