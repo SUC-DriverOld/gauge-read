@@ -6,7 +6,7 @@
         "num_workers": 0
     },
     "Experiment": {
-        "exp_name": "meter_data_multimodal_4",
+        "exp_name": "meter_data_multimodal",
         "save_dir": "logs",
         "vis_dir": "./vis/",
         "output_dir": "output",
@@ -32,7 +32,7 @@
         "stn_model_path": "./logs/stn/stn_ep50_loss0.0108.pth"
     },
     "Predict": {
-        "model_path": "pretrain/textgraph_vgg_100.pth",
+        "model_path": "logs\\meter_data_multimodal\\textgraph_vgg_25.pth",
         "use_yolo": true,
         "use_stn": true
     },

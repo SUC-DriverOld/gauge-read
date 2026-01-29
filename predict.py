@@ -80,13 +80,17 @@ for index in image_list:
                 print(f"Detection error: {e}")
                 continue
 
-            pointer_pred, dail_pred, text_pred, preds, std_points = (
+            pointer_pred, dail_pred, text_pred, preds, std_points, aux_map = (
                 output["pointer"],
                 output["dail"],
                 output["text"],
                 output["reco"],
                 output["std"],
+                output["aux"]
             )
+
+            if aux_map is not None:
+                cv2.imshow("aux_blackhat", aux_map)
 
             # decode predicted text
             pred, preds_size = preds

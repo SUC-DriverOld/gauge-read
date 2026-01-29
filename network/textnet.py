@@ -145,6 +145,11 @@ class TextNet(nn.Module):
         else:
             self.blackhat_gen = None
 
+    def load_model(self, model_path):
+        print("Loading from {}".format(model_path))
+        state_dict = torch.load(model_path)
+        self.load_state_dict(state_dict["model"])
+
     def forward(self, x_input, boxes=None, mapping=None):
         # 1. Handle Multimodal Input
         if self.use_multimodal:
@@ -222,7 +227,7 @@ class TextNet(nn.Module):
         # print("std",std_point)
 
         if len(std_point) == 0:
-            return pointer_pred, dail_label, text_label, (None, None), None
+            return pointer_pred, dail_label, text_label, (None, None), None, None
 
         if len(std_point) < 2:
             # std_point=None
@@ -267,8 +272,15 @@ class TextNet(nn.Module):
         else:
             preds = None
             preds_size = None
+        
+        # Prepare auxiliary map for visualization if it exists
+        aux_map = None
+        if self.use_multimodal and 'aux' in locals():
+            # aux is (B, 1, H, W). Take 0th in batch, 0th channel
+            aux_map = aux[0, 0].cpu().numpy()
+            aux_map = (aux_map * 255).astype(np.uint8)
 
-        return pointer_pred, dail_label, text_label, (preds, preds_size), std_point
+        return pointer_pred, dail_label, text_label, (preds, preds_size), std_point, aux_map
 
     def filter(self, image, n=30):
         text_num, text_label = cv2.connectedComponents(image.astype(np.uint8), connectivity=8)
