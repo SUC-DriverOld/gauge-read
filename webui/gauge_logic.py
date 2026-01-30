@@ -3,20 +3,20 @@ import os
 import torch
 import cv2
 import numpy as np
+import gradio as gr
 from PIL import Image
 
-# Add parent directory to path to import existing modules
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from util.config import config as cfg
 from network.textnet import TextNet
-from util.detection_mask import TextDetector as TextDetector_mask
+from util.detection_mask import TextDetector
 from util.read_meter import MeterReader
 from util.converter import StringLabelConverter
 from util.augmentation import BaseTransform
 from util.misc import to_device
 from dataset.stn_transform import STNTransformer
-from get_meter_area import Detector as YoloDetector
+from get_meter_area import Detector
 
 
 class GaugeAppModel:
@@ -28,7 +28,7 @@ class GaugeAppModel:
         self.converter = StringLabelConverter()
         self.meter_reader = MeterReader()
         self.transform = BaseTransform(size=cfg.test_size, mean=cfg.means, std=cfg.stds)
-        self.yolo_detector = YoloDetector()
+        self.yolo_detector = None
 
         # Current state
         self.current_image = None
@@ -58,11 +58,11 @@ class GaugeAppModel:
             model_dict.update(pretrained_dict)
             self.textnet.load_state_dict(model_dict)
         except Exception as e:
-            return f"Error loading TextNet: {str(e)}"
+            gr.Error(f"无法加载读数模型: {str(e)}")
 
         self.textnet = self.textnet.to(self.device)
         self.textnet.eval()
-        self.detector = TextDetector_mask(self.textnet)
+        self.detector = TextDetector(self.textnet)
 
         # Load STN
         if stn_path:
@@ -70,23 +70,23 @@ class GaugeAppModel:
             try:
                 self.stn = STNTransformer(stn_path, device=self.device)
             except Exception as e:
-                return f"Error loading STN: {str(e)}"
+                gr.Error(f"无法加载STN模型: {str(e)}")
         else:
             self.stn = None
 
         # Load YOLO
         try:
             print(f"Loading YOLO Detector from {yolo_path if yolo_path else 'default'}...")
-            self.yolo_detector = YoloDetector(weights=yolo_path)
+            self.yolo_detector = Detector(weights=yolo_path)
         except Exception as e:
-            print(f"Warning: Failed to load YOLO: {e}")
+            gr.Error(f"无法加载YOLO模型: {str(e)}")
             self.yolo_detector = None
 
-        return "Models loaded successfully!"
+        gr.Info("模型加载完成")
 
     def process_image(self, input_image, use_stn=True, use_yolo=False):
         if input_image is None or self.textnet is None:
-            return None, "Model not loaded or no image.", 0.0, 0.0
+            return None, "模型未加载或未上传图片", 0.0, 0.0
 
         # Convert to numpy/cv2 if PIL
         if isinstance(input_image, Image.Image):
@@ -102,14 +102,14 @@ class GaugeAppModel:
         meter_img = image
         if use_yolo:
             if self.yolo_detector is None:
-                return None, "YOLO selected but not loaded correctly.", 0.0, 0.0
+                return None, "YOLO模型未正确加载", 0.0, 0.0
             # Assuming 'index' param in detector.detect is just for debug print/mask saving
             # We pass "web_upload"
             _, _, _, meter_list = self.yolo_detector.detect(image, "web_upload")
             if len(meter_list) > 0:
                 meter_img = meter_list[0]  # Take first detected meter
             else:
-                return None, "YOLO enabled but no meter detected.", 0.0, 0.0
+                return None, "YOLO未检测到仪表", 0.0, 0.0
 
         # 2. STN
         processed_img = meter_img
@@ -125,22 +125,13 @@ class GaugeAppModel:
         try:
             output = self.detector.detect1(trans_img)
         except Exception as e:
-            return None, f"Inference Error: {e}", 0.0, 0.0
+            return None, f"推理错误: {e}", 0.0, 0.0
 
-        # Unpack
-        # Note: detect1 logic was modified in previous turn to return aux map?
-        # If user undid changes, `detect1` returns old tuple.
-        # We need to handle both cases safely.
         res = output
         if isinstance(res, dict):
             pointer_pred = res["pointer"]
-            dail_pred = res["dail"]
-            text_pred = res["text"]
             preds = res["reco"]
-            std_points = res["std"]  # This is usually returning None/Empty in raw `detect1`?
-            # Wait, `detect1` calls `forward_test`.
-            # In `textnet.py`, `forward_test` returns `std_points` calculated from contours.
-            # So `std_points` here should be a list of tuples [(x,y), (x,y)]
+            std_points = res["std"]
 
         # Decode Text
         pred, preds_size = preds
@@ -151,22 +142,10 @@ class GaugeAppModel:
             t = self.converter.decode(pred.data, preds_size.data, raw=False)
             pred_transcripts = t if isinstance(t, str) else t[0]
 
-        # Prepare for geometric calculation
-        # We need to run the `MeterReader` logic to get the pointer line and final value
-        # But `MeterReader` takes masks and does skeletonization.
-
-        # Prepare display image (RGB for Gradio)
         display_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB)
-
-        # Use MeterReader to get lines and value
-        # We need to invoke `meter_reader.__call__` logic but extract intermediate data
-        # Let's peek into `read_meter.py` again. `find_lines` returns `value`.
-        # It doesn't easily return the pointer coordinates.
-        # We should modify `read_meter.py` or duplicate logic here to get the pointer line coordinates.
 
         # Duplicate/Adapted Logic for control:
         p_mask = pointer_pred
-        d_mask = dail_pred
 
         # 1. Get Pointer Line
         pointer_line = self._get_pointer_line(p_mask, processed_img.shape)
@@ -196,7 +175,7 @@ class GaugeAppModel:
             if isinstance(pred_transcripts, str):
                 clean_text = "".join(filter(lambda x: x.isdigit() or x == ".", pred_transcripts))
                 self.current_end_value = float(clean_text) if clean_text else 0.0
-        except:
+        except ValueError:
             self.current_end_value = 0.0
 
         val = self.recalculate()
@@ -221,14 +200,8 @@ class GaugeAppModel:
         pts = np.column_stack((x, y))
 
         # Fit line [vx, vy, x0, y0]
-        rows, cols = shape[:2]
+        # rows, cols = shape[:2]
         [vx, vy, x0, y0] = cv2.fitLine(pts, cv2.DIST_L2, 0, 0.01, 0.01)
-
-        # Extrapolate to draw
-        # We want a segment that covers the mask
-        # Project points onto the line
-        # This is simplifying; essentially we want the "Tip" and "Tail"
-        # Let's assume the pointer is roughly centered or we find the extremes along the direction
 
         # Simple approach: Find min and max projection along direction
         vec = np.array([vx, vy]).flatten()
@@ -241,17 +214,10 @@ class GaugeAppModel:
         return [(int(min_p[0]), int(min_p[1])), (int(max_p[0]), int(max_p[1]))]
 
     def recalculate(self):
-        """
-        Calculate reading based on current state:
-        - self.current_std_points (Start Scale, End Scale/Number Point)
-        - self.current_start_value (Value at Point 1)
-        - self.current_end_value (Value at Point 2)
-        - self.current_pointer_line (Tail, Tip)
-        """
         if not self.current_std_points or len(self.current_std_points) < 2:
-            return "Error: Missing Scale Points"
+            return "缺少标定点"
         if not self.current_pointer_line:
-            return "Error: Missing Pointer"
+            return "缺少指针"
 
         # Use centralized logic from MeterReader
         val, ratio = self.meter_reader.compute_reading(
@@ -274,7 +240,7 @@ class GaugeAppModel:
             )  # Green Start
             cv2.putText(
                 img,
-                f"Start({self.current_start_value})",
+                "Start",
                 (int(self.current_std_points[0][0]) + 10, int(self.current_std_points[0][1])),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
@@ -288,7 +254,7 @@ class GaugeAppModel:
             )  # Red End
             cv2.putText(
                 img,
-                f"End({self.current_end_value})",
+                "End",
                 (int(self.current_std_points[1][0]) + 10, int(self.current_std_points[1][1])),
                 cv2.FONT_HERSHEY_SIMPLEX,
                 0.5,
@@ -301,10 +267,8 @@ class GaugeAppModel:
             p1 = tuple(map(int, self.current_pointer_line[0]))
             p2 = tuple(map(int, self.current_pointer_line[1]))
             cv2.line(img, p1, p2, (255, 0, 0), 2)  # Blue Pointer
-            # Center
-            cv2.line(img, (int(img.shape[1] / 2), 0), (int(img.shape[1] / 2), img.shape[0]), (100, 100, 100), 1)
             cv2.circle(img, p2, 3, (255, 255, 0), -1)  # Tip
-
+        
         return img
 
     def update_point(self, point_type, x, y):
@@ -331,13 +295,13 @@ class GaugeAppModel:
     def update_start_val(self, text):
         try:
             self.current_start_value = float(text)
-        except:
-            pass
+        except ValueError:
+            return gr.skip(), "起始值输入无效"
         return self.draw_visualization(), self.recalculate()
 
     def update_end_val(self, text):
         try:
             self.current_end_value = float(text)
-        except:
-            pass
+        except ValueError:
+            return gr.skip(), "结束值输入无效"
         return self.draw_visualization(), self.recalculate()

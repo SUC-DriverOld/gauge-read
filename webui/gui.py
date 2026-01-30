@@ -23,7 +23,7 @@ def find_free_port(ip, start_port=11451, end_port=19198):
                 return port
             except OSError:
                 continue
-    messagebox.showerror("Error", f"Could not find a free port in the range {start_port}-{end_port}.")
+    messagebox.showerror("错误", f"无法在端口范围 {start_port}-{end_port} 内找到可用端口！")
     os._exit(1)
 
 
@@ -63,7 +63,7 @@ def main():
     except Exception as e:
         import traceback
 
-        messagebox.showerror("Error", f"Failed to start the webview: {e}\n{traceback.format_exc()}")
+        messagebox.showerror("错误", f"启动 webview 失败: {e}\n{traceback.format_exc()}")
     os._exit(0)
 
 
