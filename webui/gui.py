@@ -5,12 +5,11 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(current_dir)
 
 import webview
-import multiprocessing
 import warnings
 import socket
 from tkinter import messagebox
 
-multiprocessing.set_start_method("spawn", force=True)
+gradio_app = None
 os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
 warnings.filterwarnings("ignore")
 
@@ -27,42 +26,35 @@ def find_free_port(ip, start_port=11451, end_port=19198):
     os._exit(1)
 
 
-def launcher(server_name, server_port):
-    # 此处实现gradio的启动
-    import app as gradio_app
+def start_gradio(server_name, server_port):
+    import app
+    global gradio_app
+    gradio_app = app
 
     print(f"WebUI launching on {server_name}:{server_port}")
-    gradio_app.demo.launch(inbrowser=False, share=False, server_name=server_name, server_port=server_port)
-
-
-def start_gradio(server_name, server_port):
-    gradio_process = multiprocessing.Process(target=launcher, args=(server_name, server_port))
-    gradio_process.start()
-    return gradio_process
+    gradio_app.demo.launch(inbrowser=False, share=False, server_name=server_name, server_port=server_port, prevent_thread_lock=True)
 
 
 def main():
     server_name = "127.0.0.1"
     server_port = find_free_port(server_name)
-    isdebug = False
+
     try:
-        gradio_process = start_gradio(server_name, server_port)
         webview.create_window(
-            title="Gauge Reader GUI",
+            title="模拟仪表读数系统",
             url=f"index.html?ip={server_name}&port={server_port}",
-            width=1300,
-            height=850,
+            width=1600,
+            height=900,
             frameless=False,
             easy_drag=False,
             text_select=False,
             confirm_close=True,
         )
-        webview.start(debug=isdebug, http_server=False)
-        gradio_process.terminate()
-        gradio_process.join()
+        webview.start(func=start_gradio, args=(server_name, server_port), debug=False, http_server=False)
+        if gradio_app:
+            gradio_app.demo.close()
     except Exception as e:
         import traceback
-
         messagebox.showerror("错误", f"启动 webview 失败: {e}\n{traceback.format_exc()}")
     os._exit(0)
 
