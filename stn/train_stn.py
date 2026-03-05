@@ -11,7 +11,7 @@ from tensorboardX import SummaryWriter
 from argparse import ArgumentParser
 from torch.utils.data import DataLoader
 
-from utils import warp
+from utils import warp, warp_points, draw_points_on_batch
 from datasets import ClockSyn, STNTest
 from stn_model import STNModel, STNLoss
 
@@ -47,16 +47,17 @@ def train(args):
     best_loss = float("inf")
     for ep in range(args.epochs):
         train_pbar = tqdm(trn_loader, total=len(trn_loader), desc=f"Train Epoch {ep}", leave=False)
-        for i, (img, Minv) in enumerate(train_pbar):
+        for i, (img, Minv, center) in enumerate(train_pbar):
             model_stn.train()
             optimizer.zero_grad()
 
             img = img.float().to(device)
             Minv = Minv.to(device)
+            center = center.to(device)
 
-            Minv_pred, pred_st = model_stn(img)
+            Minv_pred, pred_st, pred_center = model_stn(img)
 
-            loss = criterion(pred_st, Minv)
+            loss, loss_reg, loss_center = criterion(pred_st, Minv, pred_center, center)
             loss.backward()
             optimizer.step()
             scheduler.step()
@@ -66,16 +67,34 @@ def train(args):
             current_lr = scheduler.get_last_lr()[0]
             writer.add_scalar("train/lr", current_lr, global_step)
             writer.add_scalar("train/loss", loss.item(), global_step)
+            writer.add_scalar("train/loss_reg", loss_reg.item(), global_step)
+            writer.add_scalar("train/loss_center", loss_center.item(), global_step)
             writer.add_scalar("train/avg_loss", total_loss / (global_step + 1), global_step)
 
             train_pbar.set_postfix(
-                {"loss": f"{loss.item():.4f}", "avg_loss": f"{(total_loss / (global_step + 1)):.4f}", "lr": f"{current_lr:.2e}"}
+                {
+                    "loss": f"{loss.item():.4f}", 
+                    "l_reg": f"{loss_reg.item():.4f}", 
+                    "l_cen": f"{loss_center.item():.4f}", 
+                    "avg": f"{(total_loss / (global_step + 1)):.4f}", 
+                    "lr": f"{current_lr:.2e}"
+                }
             )
 
             if i == 0:
+                # 转换坐标到像素坐标 (sz=224)
+                points_pixel = center * 224.0
+                # 对点进行 warp
+                warped_points = warp_points(points_pixel, Minv_pred, device=device, sz=224)
+                
+                # 在原图和变换图上画红点
+                img_with_pt = draw_points_on_batch(img, points_pixel, color=(1.0, 0.0, 0.0))
+                
                 img_warped = warp(img, Minv_pred, device=device)
-                writer.add_images("train/original", img, global_step)
-                writer.add_images("train/warped", img_warped, global_step)
+                img_warped_with_pt = draw_points_on_batch(img_warped, warped_points, color=(1.0, 0.0, 0.0))
+                
+                writer.add_images("train/original", img_with_pt, global_step)
+                writer.add_images("train/warped", img_warped_with_pt, global_step)
 
         if test_loader:
             model_stn.eval()
@@ -83,12 +102,19 @@ def train(args):
                 test_pbar = tqdm(test_loader, total=len(test_loader), desc=f"Test Epoch {ep}", leave=False)
                 for i, img in enumerate(test_pbar):
                     img = img.to(device)
-                    Minv_pred, _ = model_stn(img)
-                    img_warped = warp(img, Minv_pred, device=device)
-
+                    Minv_pred, _, pred_center = model_stn(img)
+                    
                     if i == 0:
-                        writer.add_images("test/original", img, global_step)
-                        writer.add_images("test/warped", img_warped, global_step)
+                        points_pixel = pred_center * 224.0
+                        warped_points = warp_points(points_pixel, Minv_pred, device=device, sz=224)
+                        
+                        img_with_pt = draw_points_on_batch(img, points_pixel, color=(1.0, 0.0, 0.0))
+                        
+                        img_warped = warp(img, Minv_pred, device=device)
+                        img_warped_with_pt = draw_points_on_batch(img_warped, warped_points, color=(1.0, 0.0, 0.0))
+
+                        writer.add_images("test/original", img_with_pt, global_step)
+                        writer.add_images("test/warped", img_warped_with_pt, global_step)
 
         ep_loss = total_loss / ((ep + 1) * len(trn_loader))
         if ep_loss < best_loss:

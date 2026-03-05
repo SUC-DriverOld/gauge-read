@@ -485,6 +485,7 @@ def gen_gauge(use_homography=True, use_artefacts=False, use_arguments=False):
     IMG[Iy : Iy + h, Ix : Ix + w, :] = img
     img = IMG
 
+    center_pt = np.array([[[Ix + w / 2.0, Iy + h / 2.0]]], dtype=np.float32)
     if use_homography:
         points = np.array(((Ix, Iy), (Ix + w, Iy), (Ix, Iy + h), (Ix + w, Iy + h)), dtype=np.float32)
         # 限制最大扰动,确保圆形不会被裁剪
@@ -494,8 +495,11 @@ def gen_gauge(use_homography=True, use_artefacts=False, use_arguments=False):
         M = cv2.getPerspectiveTransform(points, points2)
         img = cv2.warpPerspective(img, M, (H, W), borderValue=canvas_background_colour)
         Minv = cv2.findHomography(points2 * 2 / 448 - 1, points * 2 / 448 - 1)[0]
+        center_pt_warped = cv2.perspectiveTransform(center_pt, M)
+        final_cx, final_cy = center_pt_warped[0][0]
     else:
         Minv = np.array([[1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]]).astype(np.float32)
+        final_cx, final_cy = center_pt[0][0]
 
     if use_arguments:
         r = img[:, :, 0] * np.random.uniform(0.9, 1.1)
@@ -508,13 +512,16 @@ def gen_gauge(use_homography=True, use_artefacts=False, use_arguments=False):
             k = np.random.randint(1, 10)
             img = cv2.blur(img, (k, k))
         if truefalse(0.5):  # noise
-            H, W, _ = np.shape(img)
-            img = img + 10 * np.random.uniform(-1.0, 1.0, (H, W, 3))
+            img_h, img_w, _ = np.shape(img)
+            img = img + 10 * np.random.uniform(-1.0, 1.0, (img_h, img_w, 3))
         if truefalse(0.5):  # resize
             sz = np.random.randint(64, 256)
+            img_h, img_w, _ = np.shape(img)
             img = cv2.resize(img, (sz, sz))
+            final_cx = final_cx * sz / img_w
+            final_cy = final_cy * sz / img_h
 
-    return (img, (angle_start, angle_end, angle_pointer), (start_value, end_value, reading_value), Minv)
+    return (img, (angle_start, angle_end, angle_pointer), (start_value, end_value, reading_value), Minv, (final_cx, final_cy))
 
 
 if __name__ == "__main__":
@@ -522,7 +529,7 @@ if __name__ == "__main__":
 
     imgs = []
     for _ in range(20):
-        img, angle, value, Minv = gen_gauge()
+        img, angle, value, Minv, center = gen_gauge()
         img = cv2.resize(img, (512, 512))
         imgs.append(img)
 

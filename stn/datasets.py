@@ -18,11 +18,17 @@ class ClockSyn(Dataset):
         return self.size
 
     def __getitem__(self, i):
-        img, _, _, Minv = gen_gauge(self.use_homography, self.use_artefacts, self.use_arguments)
+        img, _, _, Minv, center = gen_gauge(self.use_homography, self.use_artefacts, self.use_arguments)
+        
+        # 将原图上的圆心坐标归一化到 [0, 1] 区间，原始图像尺寸默认是 512x512
+        H, W = img.shape[:2]
+        cx, cy = center
+        center_norm = np.array([cx / W, cy / H], dtype=np.float32)
+
         img = np.clip(img, 0, 255)
         img = cv2.resize(img, (224, 224)) / 255.0
         img = img.transpose(2, 0, 1)  # (H, W, C) -> (C, H, W)
-        return img, Minv
+        return img, Minv, center_norm
 
 
 class STNTest(Dataset):

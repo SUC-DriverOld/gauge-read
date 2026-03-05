@@ -7,7 +7,7 @@ import torch
 import cv2
 import numpy as np
 from argparse import ArgumentParser
-from utils import warp
+from utils import warp, warp_points
 from stn_model import STNModel
 
 
@@ -41,11 +41,24 @@ def rectify_clock_image(model_stn, image_path, device="cuda"):
     img = img.float().to(device)
 
     with torch.no_grad():
-        Minv_pred, pred_st = model_stn(img)
+        Minv_pred, pred_st, pred_center = model_stn(img)
         img_warped = warp(img, Minv_pred)
+        
+        # 将归一化圆心转为网络输入尺寸(224)下的像素点坐标
+        points_pixel = pred_center * 224.0
+        warped_points = warp_points(points_pixel, Minv_pred, device=device, sz=224)
 
     original_img = postprocess_image(img)
     warped_img = postprocess_image(img_warped)
+    
+    # 绘制预测的圆心点(红点)
+    cx, cy = map(int, points_pixel.squeeze(0).cpu().numpy())
+    cv2.circle(original_img, (cx, cy), 3, (0, 0, 255), -1)
+    
+    # 绘制变换后的圆心点(红点)
+    wcx, wcy = map(int, warped_points.squeeze(0).cpu().numpy())
+    cv2.circle(warped_img, (wcx, wcy), 3, (0, 0, 255), -1)
+
     homography_matrix = Minv_pred.squeeze(0).cpu().numpy()
 
     return original_img, warped_img, homography_matrix
