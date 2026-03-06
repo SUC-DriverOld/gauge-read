@@ -8,7 +8,7 @@ class MeterReader(object):
     def __init__(self):
         pass
 
-    def compute_reading(self, std_points, pointer_line, start_val=0.0, end_val=0.0):
+    def compute_reading(self, std_points, pointer_line, start_val=0.0, end_val=0.0, predicted_center=None):
         """
         Compute the reading value based on scale points and pointer line.
 
@@ -17,6 +17,7 @@ class MeterReader(object):
             pointer_line: List of two points [(root_x, root_y), (tip_x, tip_y)] representing the pointer.
             start_val: The numeric value at std_points[0].
             end_val: The numeric value at std_points[1].
+            predicted_center: Optional tuple/list for meter center (cx, cy).
 
         Returns:
             float: The calculated reading value.
@@ -32,12 +33,14 @@ class MeterReader(object):
         ptr_tip = np.array(pointer_line[1])
 
         # Calculate Center
-        center_coords = self.calculate_center_from_geometry(std_points, pointer_line)
-
-        if center_coords is None:
-            center = ptr_root
+        if predicted_center is not None:
+            center = np.array(predicted_center)
         else:
-            center = np.array(center_coords)
+            center_coords = self.calculate_center_from_geometry(std_points, pointer_line)
+            if center_coords is None:
+                center = ptr_root
+            else:
+                center = np.array(center_coords)
 
         # Helper for angle (using arctan2 for robustness)
         def get_angle(pt, c):
@@ -66,14 +69,14 @@ class MeterReader(object):
 
         return float(f"{reading:.4f}"), float(f"{ratio:.4f}")
 
-    def __call__(self, image, point_mask, dail_mask, word_mask, number, std_point):
+    def __call__(self, image, point_mask, dail_mask, word_mask, number, std_point, predicted_center=None):
         img_result = image.copy()
-        value = self.find_lines(img_result, point_mask, dail_mask, word_mask, number, std_point)
+        value = self.find_lines(img_result, point_mask, dail_mask, word_mask, number, std_point, predicted_center)
         print("value", value)
 
         return value
 
-    def find_lines(self, ori_img, pointer_mask, dail_mask, word_mask, number, std_point):
+    def find_lines(self, ori_img, pointer_mask, dail_mask, word_mask, number, std_point, predicted_center=None):
         # 实施骨架算法
         pointer_skeleton = morphology.skeletonize(pointer_mask)
         pointer_edges = pointer_skeleton * 255
@@ -112,16 +115,22 @@ class MeterReader(object):
         h, w, _ = ori_img.shape
         center = (0.5 * w, 0.5 * h)
 
-        # Try to calculate a better center using geometry:
-        # Intersection of pointer line and the perpendicular bisector of the two scale points
-        if std_point is not None:
-            geo_center = self.calculate_center_from_geometry(std_point, (coin1, coin2))
-            if geo_center is not None:
-                # Sanity check: Center should be reasonably close to image area
-                if -w < geo_center[0] < 2 * w and -h < geo_center[1] < 2 * h:
-                    center = geo_center
-                    # Draw calculated center
-                    cv2.circle(ori_img, center, 5, (0, 255, 255), -1)
+        if predicted_center is not None:
+            center = (int(predicted_center[0]), int(predicted_center[1]))
+            # Draw predicted center
+            cv2.circle(ori_img, center, 5, (0, 0, 255), -1)
+            print(f"Using predicted center from STN: {center}")
+        else:
+            # Try to calculate a better center using geometry:
+            # Intersection of pointer line and the perpendicular bisector of the two scale points
+            if std_point is not None:
+                geo_center = self.calculate_center_from_geometry(std_point, (coin1, coin2))
+                if geo_center is not None:
+                    # Sanity check: Center should be reasonably close to image area
+                    if -w < geo_center[0] < 2 * w and -h < geo_center[1] < 2 * h:
+                        center = geo_center
+                        # Draw calculated center
+                        cv2.circle(ori_img, center, 5, (0, 255, 255), -1)
 
         dis1 = (coin1[0] - center[0]) ** 2 + (coin1[1] - center[1]) ** 2
         dis2 = (coin2[0] - center[1]) ** 2 + (coin2[1] - center[1]) ** 2

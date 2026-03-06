@@ -64,16 +64,17 @@ class STNTransformer:
 
     def get_homography_matrix(self, image):
         if self.model is None:
-            return None
+            return None, None
 
         h, w = image.shape[:2]
         s = max(h, w)
         img_tensor = self.process_image(image)
 
         with torch.no_grad():
-            Minv_pred, _ = self.model(img_tensor)
+            Minv_pred, _, pred_center = self.model(img_tensor)
             # Minv_pred is [1, 3, 3]
             minv = Minv_pred.squeeze(0).cpu().numpy()  # This is likely for normalized coords [-1, 1]
+            center_norm = pred_center.squeeze(0).cpu().numpy()
 
         N = np.array([[2.0 / s, 0, -1], [0, 2.0 / s, -1], [0, 0, 1]])
 
@@ -83,17 +84,20 @@ class STNTransformer:
         try:
             H = np.linalg.inv(M_pixel_inv)
         except np.linalg.LinAlgError:
-            return None
+            return None, None
 
-        return H
+        # Calculate center in padded pixel coordinates
+        center_pixel = np.array([center_norm[0] * s, center_norm[1] * s], dtype=np.float32)
+
+        return H, center_pixel
 
     def __call__(self, image, polygons):
         if self.model is None:
-            return image, polygons
+            return image, polygons, None
 
-        H_mat = self.get_homography_matrix(image)
+        H_mat, center_pixel = self.get_homography_matrix(image)
         if H_mat is None:
-            return image, polygons
+            return image, polygons, None
 
         h, w = image.shape[:2]
         m = max(h, w)
@@ -129,6 +133,13 @@ class STNTransformer:
 
         # Warp canvas with new square size and centered transformation
         image_warped = cv2.warpPerspective(canvas, H_new, (side, side))
+        
+        # Warp center
+        warped_center = None
+        if center_pixel is not None:
+            c_pts = np.array([[[center_pixel[0], center_pixel[1]]]], dtype=np.float32)
+            c_pts_warped = cv2.perspectiveTransform(c_pts, H_new)
+            warped_center = c_pts_warped[0][0]
 
         # Warp polygons
         new_polygons = []
@@ -144,4 +155,4 @@ class STNTransformer:
                 poly.points = transformed_pts
                 new_polygons.append(poly)
 
-        return image_warped, new_polygons
+        return image_warped, new_polygons, warped_center

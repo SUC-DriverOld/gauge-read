@@ -113,12 +113,36 @@ class GaugeAppModel:
 
         # 2. STN
         processed_img = meter_img
-        if use_stn and self.stn:
-            processed_img, _ = self.stn(meter_img, None)
+        predicted_center = None
+        
+        # 无论是否使用STN变形，只要有STN模型，都可以用来预测圆心
+        if self.stn:
+            if use_stn:
+                stn_img, _, warped_center = self.stn(meter_img, None)
+                processed_img = stn_img
+                predicted_center = warped_center
+            else:
+                # 不使用变形时，依然获取在原图(未变形)坐标系下的圆心
+                _, center_pixel = self.stn.get_homography_matrix(meter_img)
+                predicted_center = center_pixel
 
-        # 3. TextNet Inference
-        trans_img, _ = self.transform(processed_img)
-        trans_img = trans_img.transpose(2, 0, 1)
+        # 3. TextNet Inference (使用 BaseTransform 获取统一坐标系和规范化的输入)
+        trans_img_np, _ = self.transform(processed_img)
+        
+        # 核心：将预测的圆心坐标同步映射缩放到 TextNet 推理的特征图尺寸上
+        if predicted_center is not None:
+            ori_h, ori_w = processed_img.shape[:2]
+            new_h, new_w = trans_img_np.shape[:2]
+            cx = predicted_center[0] * (new_w / ori_w)
+            cy = predicted_center[1] * (new_h / ori_h)
+            predicted_center = (cx, cy)
+
+        # 构建用于界面展示和画图的 display_img，反向归一化 trans_img_np
+        img_show = trans_img_np.copy()
+        img_show = ((img_show * cfg.stds + cfg.means) * 255).astype(np.uint8)
+        display_img = cv2.cvtColor(img_show, cv2.COLOR_BGR2RGB)
+
+        trans_img = trans_img_np.transpose(2, 0, 1)
         trans_img = torch.from_numpy(trans_img).unsqueeze(0)
         trans_img = to_device(trans_img)
 
@@ -142,13 +166,11 @@ class GaugeAppModel:
             t = self.converter.decode(pred.data, preds_size.data, raw=False)
             pred_transcripts = t if isinstance(t, str) else t[0]
 
-        display_img = cv2.cvtColor(processed_img, cv2.COLOR_BGR2RGB)
-
         # Duplicate/Adapted Logic for control:
         p_mask = pointer_pred
 
         # 1. Get Pointer Line
-        pointer_line = self._get_pointer_line(p_mask, processed_img.shape)
+        pointer_line = self._get_pointer_line(p_mask, trans_img_np.shape, predicted_center)
 
         # 2. Get Std Points if not valid from model
         # The model tries to find them. If `std_points` from model is valid (len>=2), use it.
@@ -166,6 +188,7 @@ class GaugeAppModel:
         self.current_image = display_img
         self.current_pointer_line = pointer_line  # [start(x,y), end(x,y)]
         self.current_std_points = final_std
+        self.current_center = predicted_center
         # Note: current logic assumes P1 is always 0.
         self.current_start_value = 0.0
 
@@ -180,38 +203,38 @@ class GaugeAppModel:
 
         val = self.recalculate()
 
-        return display_img, val, self.current_start_value, self.current_end_value
+        return self.draw_visualization(), val, self.current_start_value, self.current_end_value
 
-    def _get_pointer_line(self, mask, shape):
-        # Skeletonize and find line
+    def _get_pointer_line(self, mask, shape, center=None):
+        # 严格遵守 predict.py (util/read_meter.py) 中的 HoughLinesP 骨架化提取，避免非STN状态下的噪点干扰
         from skimage import morphology
 
-        skeleton = morphology.skeletonize(mask > 0)
-        # Find endpoints or fit line?
-        # Simple method: Probabilistic Hough Line or just fitLine on non-zero points
-        y, x = np.where(skeleton)
-        if len(x) < 10:
-            # Fallback: centroids
-            y, x = np.where(mask > 0.5)
+        pointer_skeleton = morphology.skeletonize(mask > 0)
+        pointer_edges = pointer_skeleton * 255
+        pointer_edges = pointer_edges.astype(np.uint8)
 
-        if len(x) < 2:
+        pointer_lines = cv2.HoughLinesP(
+            pointer_edges, 1, np.pi / 180, 10, np.array([]), minLineLength=10, maxLineGap=400
+        )
+
+        if pointer_lines is not None and len(pointer_lines) > 0:
+            x1, y1, x2, y2 = pointer_lines[0][0]
+            pt1 = (int(x1), int(y1))
+            pt2 = (int(x2), int(y2))
+        else:
             return [(0, 0), (10, 10)]
 
-        pts = np.column_stack((x, y))
+        if center is not None:
+            cx, cy = center[0], center[1]
+            d1 = (pt1[0] - cx)**2 + (pt1[1] - cy)**2
+            d2 = (pt2[0] - cx)**2 + (pt2[1] - cy)**2
+            if d1 > d2:
+                # pt2 is closer to center -> pt2 is root, pt1 is tip
+                return [pt2, pt1]
+            else:
+                return [pt1, pt2]
 
-        # Fit line [vx, vy, x0, y0]
-        # rows, cols = shape[:2]
-        [vx, vy, x0, y0] = cv2.fitLine(pts, cv2.DIST_L2, 0, 0.01, 0.01)
-
-        # Simple approach: Find min and max projection along direction
-        vec = np.array([vx, vy]).flatten()
-        p0 = np.array([x0, y0]).flatten()
-
-        projections = np.dot(pts - p0, vec)
-        min_p = p0 + vec * np.min(projections)
-        max_p = p0 + vec * np.max(projections)
-
-        return [(int(min_p[0]), int(min_p[1])), (int(max_p[0]), int(max_p[1]))]
+        return [pt1, pt2]
 
     def recalculate(self):
         if not self.current_std_points or len(self.current_std_points) < 2:
@@ -221,7 +244,7 @@ class GaugeAppModel:
 
         # Use centralized logic from MeterReader
         val, ratio = self.meter_reader.compute_reading(
-            self.current_std_points, self.current_pointer_line, self.current_start_value, self.current_end_value
+            self.current_std_points, self.current_pointer_line, self.current_start_value, self.current_end_value, getattr(self, "current_center", None)
         )
         self.current_ratio = ratio
 
@@ -264,10 +287,25 @@ class GaugeAppModel:
 
         # Draw Pointer
         if self.current_pointer_line:
-            p1 = tuple(map(int, self.current_pointer_line[0]))
-            p2 = tuple(map(int, self.current_pointer_line[1]))
-            cv2.line(img, p1, p2, (255, 0, 0), 2)  # Blue Pointer
-            cv2.circle(img, p2, 3, (255, 255, 0), -1)  # Tip
+            p1 = tuple(map(int, self.current_pointer_line[0]))  # root
+            p2 = tuple(map(int, self.current_pointer_line[1]))  # tip
+            
+            # 使用带有箭头的线段代替原本的普通直线和圆点
+            cv2.arrowedLine(img, p1, p2, (255, 0, 0), 2, tipLength=0.1)  # Blue Pointer with Arrow
+            
+        # Draw Center
+        if getattr(self, "current_center", None) is not None:
+            cx, cy = int(self.current_center[0]), int(self.current_center[1])
+            cv2.circle(img, (cx, cy), 5, (0, 255, 255), -1)  # Yellow Center
+            cv2.putText(
+                img,
+                "Center",
+                (cx + 10, cy),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.5,
+                (0, 255, 255),
+                1,
+            )
         
         return img
 
@@ -289,6 +327,8 @@ class GaugeAppModel:
             if not self.current_pointer_line:
                 self.current_pointer_line = [(0, 0), (0, 0)]
             self.current_pointer_line[0] = (x, y)
+        elif point_type == "center":
+            self.current_center = (x, y)
 
         return self.draw_visualization(), self.recalculate()
 

@@ -76,7 +76,7 @@ class Meter(TextDataset):
 
         # Apply STN correction
         if self.stn_transformer is not None and polygons is not None:
-            image, polygons = self.stn_transformer(image, polygons)
+            image, polygons, _ = self.stn_transformer(image, polygons)
 
         # if polygons is not None:
         #     print(f"Loaded {len(polygons)} polygons for {idx}")

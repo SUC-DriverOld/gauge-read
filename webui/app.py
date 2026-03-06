@@ -18,7 +18,7 @@ def get_model_files(directory):
 
 ckpt_dir = os.path.join(parent_dir, "pretrain")
 log_dir = os.path.join(parent_dir, "logs")
-stn_dir = os.path.join(parent_dir, "logs", "stn")
+stn_dir = os.path.join(parent_dir, "logs", "stn_convnext")
 
 model_options = get_model_files(ckpt_dir) + get_model_files(os.path.join(parent_dir, "logs", "meter_data"))
 stn_options = get_model_files(stn_dir)
@@ -49,6 +49,8 @@ def update_point_ui(evt: gr.SelectData, mode):
         point_type = "pointer_tip"
     elif mode == "移动指针根部":
         point_type = "pointer_root"
+    elif mode == "移动圆心点":
+        point_type = "center"
 
     if point_type != "none":
         new_img, new_val = app_logic.update_point(point_type, x, y)
@@ -83,7 +85,7 @@ with gr.Blocks(title="模拟仪表读数系统") as demo:
                 run_btn = gr.Button("开始推理", variant="primary")
             with gr.Column():
                 edit_mode = gr.Radio(
-                    choices=["未选择", "移动起始点", "移动结束点", "移动指针尖端", "移动指针根部"],
+                    choices=["未选择", "移动起始点", "移动结束点", "移动指针尖端", "移动指针根部", "移动圆心点"],
                     value="未选择",
                     label="修正模式 (选择要移动的点然后点击图片)",
                 )

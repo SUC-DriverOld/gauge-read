@@ -64,8 +64,9 @@ for index in image_list:
         continue
     else:
         for i in meter_list:
+            predicted_center = None
             if stn_transformer is not None:
-                i, _ = stn_transformer(i, None)
+                i, _, predicted_center = stn_transformer(i, None)
 
             cv2.imshow("det", i)
             cv2.waitKey(0)
@@ -106,4 +107,4 @@ for index in image_list:
             img_show = image[0].permute(1, 2, 0).cpu().numpy()
             img_show = ((img_show * cfg.stds + cfg.means) * 255).astype(np.uint8)
 
-            result = meter(img_show, pointer_pred, dail_pred, text_pred, pred_transcripts, std_points)
+            result = meter(img_show, pointer_pred, dail_pred, text_pred, pred_transcripts, std_points, getattr(stn_transformer, "last_center", predicted_center))
