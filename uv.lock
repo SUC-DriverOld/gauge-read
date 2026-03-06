@@ -383,15 +383,6 @@ wheels = [
 ]
 
 [[package]]
-name = "easydict"
-version = "1.13"
-source = { registry = "https://mirrors.ustc.edu.cn/pypi/simple" }
-sdist = { url = "https://mirrors.ustc.edu.cn/pypi/packages/24/9f/d18d6b5e19244788a6d09c14a8406376b4f4bfcc008e6d17a4f4c15362e8/easydict-1.13.tar.gz", hash = "sha256:b1135dedbc41c8010e2bc1f77ec9744c7faa42bce1a1c87416791449d6c87780", size = 6809, upload-time = "2024-03-04T12:04:41.251Z" }
-wheels = [
-    { url = "https://mirrors.ustc.edu.cn/pypi/packages/05/ec/fa6963f1198172c2b75c9ab6ecefb3045991f92f75f5eb41b6621b198123/easydict-1.13-py3-none-any.whl", hash = "sha256:6b787daf4dcaf6377b4ad9403a5cee5a86adbc0ca9a5bcf5410e9902002aeac2", size = 6804, upload-time = "2024-03-04T12:04:39.508Z" },
-]
-
-[[package]]
 name = "einops"
 version = "0.8.1"
 source = { registry = "https://mirrors.ustc.edu.cn/pypi/simple" }
@@ -489,7 +480,6 @@ version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
     { name = "accelerate" },
-    { name = "easydict" },
     { name = "einops" },
     { name = "gradio" },
     { name = "kornia" },
@@ -498,6 +488,7 @@ dependencies = [
     { name = "opencv-python" },
     { name = "pandas" },
     { name = "pywebview" },
+    { name = "pyyaml" },
     { name = "scikit-image" },
     { name = "scikit-learn" },
     { name = "seaborn" },
@@ -517,7 +508,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "accelerate" },
-    { name = "easydict", specifier = ">=1.13" },
     { name = "einops" },
     { name = "gradio", specifier = ">=6.5.0" },
     { name = "kornia" },
@@ -526,6 +516,7 @@ requires-dist = [
     { name = "opencv-python" },
     { name = "pandas", specifier = ">=1.2.0" },
     { name = "pywebview", specifier = ">=6.1" },
+    { name = "pyyaml", specifier = ">=6.0.2" },
     { name = "scikit-image", specifier = ">=0.26.0" },
     { name = "scikit-learn" },
     { name = "seaborn", specifier = ">=0.13.2" },

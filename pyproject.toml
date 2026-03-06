@@ -21,7 +21,7 @@ dependencies = [
     "kornia",
     "einops",
     "scikit-image>=0.26.0",
-    "easydict>=1.13",
+    "pyyaml>=6.0.2",
     "shapely>=2.1.2",
     "seaborn>=0.13.2",
     "gradio>=6.5.0",
