@@ -1,1 +1,1 @@
-from .gauge_logic import GaugeAppModel
+from .app_logic import GaugeAppModel

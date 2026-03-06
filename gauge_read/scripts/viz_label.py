@@ -1,10 +1,8 @@
 import numpy as np
 import cv2
-import os
 
 from gauge_read.utils.augmentation import Augmentation
-import time
-from gauge_read.datasets.meter_data import Meter
+from gauge_read.datasets.meter_data import MeterDataset
 import matplotlib.pyplot as plt
 
 
@@ -21,10 +19,9 @@ if __name__ == "__main__":
 
     transform = Augmentation(size=640, mean=means, std=stds)
 
-    trainset = Meter(transform=transform)
+    trainset = MeterDataset(transform=transform)
 
     for idx in range(0, len(trainset)):
-        t0 = time.time()
         print("idx", idx)
 
         img, pointer_mask, dail_mask, text_mask, train_mask, bboxs, transcripts = trainset[idx]

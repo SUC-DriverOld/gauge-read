@@ -2,7 +2,7 @@ import torch
 import cv2
 import numpy as np
 from argparse import ArgumentParser
-from gauge_read.utils.stn_ops import warp, warp_points
+from gauge_read.utils.tools import warp, warp_points
 from gauge_read.models.stn import STNModel
 
 

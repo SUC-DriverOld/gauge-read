@@ -64,6 +64,21 @@ def _load_to_config(data):
     _set_runtime_fields(config)
 
 
+def ensure_loaded(config_path=None):
+    """Ensure global config is initialized.
+
+    This keeps legacy call sites working where modules read ``config`` at import
+    time (for example, WebUI startup).
+    """
+    if "system" in config:
+        return
+
+    if config_path is None:
+        config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs", "config.yaml")
+
+    load_config(config_path)
+
+
 def load_config(config_path):
     """Load YAML config file as nested AttrDict sections."""
     if not os.path.exists(config_path):
@@ -110,10 +125,5 @@ def print_config(cfg):
     print()
 
 
-default_config_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs", "config.yaml")
-if os.path.exists(default_config_path):
-    load_config(default_config_path)
-
-
-if __name__ == "__main__":
-    print_config(config)
+# Auto-load default configuration for import-time consumers.
+ensure_loaded()

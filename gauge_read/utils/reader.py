@@ -1,7 +1,30 @@
-import os
 import cv2
 import numpy as np
+import torch
 from skimage import morphology
+
+
+class TextDetector(object):
+    def __init__(self, model):
+        self.model = model
+        model.eval()
+
+    def detect1(self, image):
+        with torch.no_grad():
+            pointer_pred, dail_pred, text_pred, pred_recog, std_points, aux_map = self.model.forward_test(image)
+
+        image = image[0].data.cpu().numpy()
+
+        output = {
+            "image": image,
+            "pointer": pointer_pred,
+            "dail": dail_pred,
+            "text": text_pred,
+            "reco": pred_recog,
+            "std": std_points,
+            "aux": aux_map,
+        }
+        return output
 
 
 class MeterReader(object):

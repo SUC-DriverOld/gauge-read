@@ -8,7 +8,7 @@ repo_root = os.path.dirname(package_root)
 if repo_root not in sys.path:
     sys.path.append(repo_root)
 
-from gauge_read.webui.gauge_logic import GaugeAppModel
+from gauge_read.webui.app_logic import GaugeAppModel
 
 app_logic = GaugeAppModel()
 

@@ -2,12 +2,7 @@ import torch
 import cv2
 import numpy as np
 import os
-
-try:
-    from gauge_read.models.stn import STNModel
-except ImportError:
-    print("Warning: Could not import STNModel. STN correction will be disabled.")
-    STNModel = None
+from gauge_read.models.stn import STNModel
 
 
 class STNTransformer:

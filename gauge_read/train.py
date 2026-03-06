@@ -17,14 +17,12 @@ if __package__ is None or __package__ == "":
     if repo_root not in sys.path:
         sys.path.insert(0, repo_root)
 
-from gauge_read.datasets import Meter
+from gauge_read.datasets import MeterDataset
 from gauge_read.models.loss import TextLoss
 from gauge_read.models.textnet import TextNet
 from gauge_read.utils.augmentation import Augmentation
 from gauge_read.utils.config import config as cfg, print_config, load_config, update_config
-from gauge_read.utils.misc import AverageMeter
-from gauge_read.utils.misc import mkdirs, to_device
-from gauge_read.utils.tool import collate_fn
+from gauge_read.utils.tools import AverageMeter, to_device, collate_fn
 from gauge_read.utils.converter import StringLabelConverter
 
 lr = None
@@ -41,15 +39,14 @@ def parse_args():
 
 def save_model(model, epoch, lr, optimzer):
     save_dir = os.path.join(cfg.experiment.save_dir, cfg.experiment.exp_name)
-    if not os.path.exists(save_dir):
-        mkdirs(save_dir)
+    os.makedirs(save_dir, exist_ok=True)
 
     save_path = os.path.join(save_dir, "textgraph_{}_{}.pth".format(model.backbone_name, epoch))
     print("Saving to {}.".format(save_path))
     state_dict = {
         "lr": lr,
         "epoch": epoch,
-        "model": model.state_dict() if not cfg.system.mgpu else model.state_dict(),
+        "model": model.state_dict(),
         "optimizer": optimzer.state_dict(),
     }
     torch.save(state_dict, save_path)
@@ -135,7 +132,7 @@ def main():
 
     transform = Augmentation(size=640, mean=means, std=stds)
 
-    trainset = Meter(transform=transform)
+    trainset = MeterDataset(transform=transform)
     train_loader = data.DataLoader(
         trainset,
         batch_size=cfg.training.batch_size,
@@ -186,8 +183,7 @@ def main():
 
     # Tensorboard writer
     log_dir = os.path.join("logs", cfg.experiment.exp_name)
-    if not os.path.exists(log_dir):
-        mkdirs(log_dir)
+    os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
 
     print("Start training")

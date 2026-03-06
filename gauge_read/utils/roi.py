@@ -57,17 +57,7 @@ def param2theta(param, w, h):
     return theta
 
 
-def batch_roi_transform(feature_map, boxes, mapping, size=(32, 180)):
-    rois = []
-    for img_index, box in zip(mapping, boxes):
-        feature = feature_map[img_index]
-        rois.append(roi_transform(feature, box, size))
-    rois = torch.stack(rois, dim=0)
-    return rois
-
-
 def rgb_to_grayscale(img):
-    # type: (Tensor) -> Tensor
     """Convert the given RGB Image Tensor to Grayscale.
     For RGB to Grayscale conversion, ITU-R 601-2 luma transform is performed which
     is L = R * 0.2989 + G * 0.5870 + B * 0.1140
@@ -80,3 +70,12 @@ def rgb_to_grayscale(img):
         raise TypeError("Input Image does not contain 3 Channels")
 
     return (0.2989 * img[0] + 0.5870 * img[1] + 0.1140 * img[2]).to(img.dtype)
+
+
+def batch_roi_transform(feature_map, boxes, mapping, size=(32, 180)):
+    rois = []
+    for img_index, box in zip(mapping, boxes):
+        feature = feature_map[img_index]
+        rois.append(roi_transform(feature, box, size))
+    rois = torch.stack(rois, dim=0)
+    return rois

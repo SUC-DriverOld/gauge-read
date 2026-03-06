@@ -1,6 +1,5 @@
 system:
   cuda: true
-  mgpu: true
   num_workers: 0
 
 experiment:

@@ -8,9 +8,10 @@ from tensorboardX import SummaryWriter
 from argparse import ArgumentParser
 from torch.utils.data import DataLoader
 
-from gauge_read.utils.stn_ops import warp, warp_points, draw_points_on_batch
-from gauge_read.datasets.stn_datasets import ClockSyn, STNTest
-from gauge_read.models.stn import STNModel, STNLoss
+from gauge_read.utils.tools import warp, warp_points, draw_points_on_batch
+from gauge_read.datasets.meter_data import ClockSyn, STNTest
+from gauge_read.models.stn import STNModel
+from gauge_read.models.loss import STNLoss
 
 
 def train(args):

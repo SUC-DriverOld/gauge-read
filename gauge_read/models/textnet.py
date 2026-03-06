@@ -2,13 +2,13 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from gauge_read.models.convnext import ConvNeXtTinyBackbone
-from gauge_read.utils.roi import batch_roi_transform
-from gauge_read.models.crnn import CRNN
-from gauge_read.utils.converter import keys
-from gauge_read.utils.misc import to_device
 import cv2
-from gauge_read.utils.tool import order_points
+
+from gauge_read.models.convnext import ConvNeXtTiny
+from gauge_read.models.crnn import CRNN
+from gauge_read.utils.roi import batch_roi_transform
+from gauge_read.utils.converter import keys
+from gauge_read.utils.tools import order_points, to_device
 from gauge_read.utils.config import config as cfg
 
 
@@ -77,7 +77,7 @@ class FPN(nn.Module):
         if backbone != "convnext_tiny":
             raise ValueError(f"Unsupported TextNet backbone: {backbone}. Only 'convnext_tiny' is supported.")
 
-        self.backbone = ConvNeXtTinyBackbone(pretrain=True, input_channels=input_channels)
+        self.backbone = ConvNeXtTiny(pretrain=True, input_channels=input_channels)
 
         # ConvNeXt-tiny channels for (C1, C2, C3, C4, C5) are (96, 96, 192, 384, 768).
         self.deconv5 = nn.ConvTranspose2d(768, 256, kernel_size=4, stride=2, padding=1)

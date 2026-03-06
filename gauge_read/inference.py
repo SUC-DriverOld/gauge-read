@@ -9,14 +9,13 @@ from yolov5.utils.augmentations import letterbox
 from yolov5.utils.general import non_max_suppression, scale_coords
 from yolov5.utils.torch_utils import select_device
 
-from gauge_read.datasets.stn_transform import STNTransformer
 from gauge_read.models.textnet import TextNet
+from gauge_read.utils.stn_transform import STNTransformer
 from gauge_read.utils.augmentation import BaseTransform
 from gauge_read.utils.config import config as cfg, print_config
 from gauge_read.utils.converter import StringLabelConverter
-from gauge_read.utils.detection_mask import TextDetector as TextDetectorMask
-from gauge_read.utils.misc import to_device
-from gauge_read.utils.read_meter import MeterReader
+from gauge_read.utils.tools import to_device
+from gauge_read.utils.reader import MeterReader, TextDetector
 
 
 class Detector(object):
@@ -131,7 +130,7 @@ def main():
     converter = StringLabelConverter()
 
     det = Detector()
-    detector = TextDetectorMask(model)
+    detector = TextDetector(model)
     meter = MeterReader()
     transform = BaseTransform(size=cfg.data.test_size, mean=cfg.model.means, std=cfg.model.stds)
 

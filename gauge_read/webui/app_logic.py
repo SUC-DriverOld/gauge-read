@@ -1,20 +1,18 @@
-import sys
-import os
 import traceback
 import torch
 import cv2
 import numpy as np
 import gradio as gr
 from PIL import Image
+from skimage import morphology
 
 from gauge_read.utils.config import config as cfg
 from gauge_read.models.textnet import TextNet
-from gauge_read.utils.detection_mask import TextDetector
-from gauge_read.utils.read_meter import MeterReader
+from gauge_read.utils.reader import MeterReader, TextDetector
 from gauge_read.utils.converter import StringLabelConverter
 from gauge_read.utils.augmentation import BaseTransform
-from gauge_read.utils.misc import to_device
-from gauge_read.datasets.stn_transform import STNTransformer
+from gauge_read.utils.tools import to_device
+from gauge_read.utils.stn_transform import STNTransformer
 from gauge_read.inference import Detector
 
 
@@ -206,8 +204,6 @@ class GaugeAppModel:
         return self.draw_visualization(), val, self.current_start_value, self.current_end_value
 
     def _get_pointer_line(self, mask, shape, center=None):
-        # 严格遵守 predict.py (util/read_meter.py) 中的 HoughLinesP 骨架化提取，避免非STN状态下的噪点干扰
-        from skimage import morphology
 
         pointer_skeleton = morphology.skeletonize(mask > 0)
         pointer_edges = pointer_skeleton * 255

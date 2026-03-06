@@ -3,7 +3,7 @@ import torch.nn as nn
 from torchvision.models import convnext_tiny, ConvNeXt_Tiny_Weights
 
 
-class ConvNeXtTinyBackbone(nn.Module):
+class ConvNeXtTiny(nn.Module):
     def __init__(self, pretrain=True, input_channels=3):
         super().__init__()
 

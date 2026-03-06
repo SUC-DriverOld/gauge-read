@@ -5,7 +5,6 @@ build/
 dist/
 wheels/
 *.egg-info
-yolov5/
 cache/
 model/
 
@@ -14,3 +13,4 @@ model/
 datas
 pretrain
 logs
+.ruff_cache/
