@@ -2,8 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
-from network.vgg import VggNet
-from network.resnet import ResNet
+from network.convnext import ConvNeXtTinyBackbone
 from util.roi import batch_roi_transform
 from network.crnn import CRNN
 from util.converter import keys
@@ -65,7 +64,7 @@ class UpBlok(nn.Module):
 
 
 class FPN(nn.Module):
-    def __init__(self, backbone="vgg_bn", is_training=True, use_multimodal=False):
+    def __init__(self, backbone="convnext_tiny", is_training=True, use_multimodal=False):
         super().__init__()
 
         self.is_training = is_training
@@ -75,31 +74,17 @@ class FPN(nn.Module):
 
         input_channels = 4 if use_multimodal else 3
 
-        if backbone == "vgg" or backbone == "vgg_bn":
-            if backbone == "vgg_bn":
-                self.backbone = VggNet(name="vgg16_bn", pretrain=True, input_channels=input_channels)
-            elif backbone == "vgg":
-                self.backbone = VggNet(name="vgg16", pretrain=True, input_channels=input_channels)
+        if backbone != "convnext_tiny":
+            raise ValueError(f"Unsupported TextNet backbone: {backbone}. Only 'convnext_tiny' is supported.")
 
-            self.deconv5 = nn.ConvTranspose2d(512, 256, kernel_size=4, stride=2, padding=1)
-            self.merge4 = UpBlok(512 + 256, 128)
-            self.merge3 = UpBlok(256 + 128, 64)
-            self.merge2 = UpBlok(128 + 64, 32)
-            self.merge1 = UpBlok(64 + 32, 32)
+        self.backbone = ConvNeXtTinyBackbone(pretrain=True, input_channels=input_channels)
 
-        elif backbone == "resnet50" or backbone == "resnet101":
-            if backbone == "resnet101":
-                self.backbone = ResNet(name="resnet101", pretrain=True, input_channels=input_channels)
-            elif backbone == "resnet50":
-                self.backbone = ResNet(name="resnet50", pretrain=True, input_channels=input_channels)
-
-            self.deconv5 = nn.ConvTranspose2d(2048, 256, kernel_size=4, stride=2, padding=1)
-            self.merge4 = UpBlok(1024 + 256, 256)
-            self.merge3 = UpBlok(512 + 256, 128)
-            self.merge2 = UpBlok(256 + 128, 64)
-            self.merge1 = UpBlok(64 + 64, 32)
-        else:
-            print("backbone is not support !")
+        # ConvNeXt-tiny channels for (C1, C2, C3, C4, C5) are (96, 96, 192, 384, 768).
+        self.deconv5 = nn.ConvTranspose2d(768, 256, kernel_size=4, stride=2, padding=1)
+        self.merge4 = UpBlok(384 + 256, 128)
+        self.merge3 = UpBlok(192 + 128, 64)
+        self.merge2 = UpBlok(96 + 64, 32)
+        self.merge1 = UpBlok(96 + 32, 32)
 
     def forward(self, x):
         C1, C2, C3, C4, C5 = self.backbone(x)
@@ -123,7 +108,7 @@ class FPN(nn.Module):
 
 
 class TextNet(nn.Module):
-    def __init__(self, backbone="vgg", is_training=True):
+    def __init__(self, backbone="convnext_tiny", is_training=True):
         super().__init__()
 
         self.use_multimodal = cfg.get("use_multimodal", False)

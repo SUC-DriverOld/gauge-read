@@ -19,7 +19,7 @@ from webui.gauge_logic import GaugeAppModel
 parser = argparse.ArgumentParser(description="Gauge Reader API")
 parser.add_argument("--yolo", type=str, default="pretrain/best.pt", help="Path to YOLO weights")
 parser.add_argument("--stn", type=str, default="logs/stn/stn_ep50_loss0.0108.pth", help="Path to STN weights")
-parser.add_argument("--textnet", type=str, default="pretrain/textgraph_vgg_100.pth", help="Path to TextNet weights")
+parser.add_argument("--textnet", type=str, default="pretrain/textgraph_convnext_tiny_100.pth", help="Path to TextNet weights")
 parser.add_argument("--host", type=str, default="0.0.0.0", help="API Host")
 parser.add_argument("--port", type=int, default=8000, help="API Port")
 args = parser.parse_args()

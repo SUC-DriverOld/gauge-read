@@ -140,15 +140,31 @@ def main():
 
     lr = cfg.lr
     moment = cfg.momentum
-    if cfg.optim == "Adam" or cfg.exp_name == "Synthtext":
-        optimizer = torch.optim.Adam(model.parameters(), lr=lr)
-    else:
-        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=moment)
+    weight_decay = cfg.get("weight_decay", 1e-2)
+    optim_name = str(cfg.get("optim", "AdamW")).lower()
 
-    if cfg.exp_name == "Synthtext":
-        scheduler = FixLR(optimizer)
+    if optim_name == "adamw":
+        optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=weight_decay)
+    elif optim_name == "adam":
+        optimizer = torch.optim.Adam(model.parameters(), lr=lr, weight_decay=weight_decay)
+    elif optim_name == "sgd":
+        optimizer = torch.optim.SGD(model.parameters(), lr=lr, momentum=moment, weight_decay=weight_decay)
     else:
-        scheduler = lr_scheduler.StepLR(optimizer, step_size=100, gamma=0.90)
+        raise ValueError(f"Unsupported optimizer: {cfg.optim}. Use AdamW/Adam/SGD.")
+
+    lr_adjust = str(cfg.get("lr_adjust", "cosine")).lower()
+    if lr_adjust == "fix":
+        scheduler = FixLR(optimizer)
+    elif lr_adjust in {"cos", "cosine", "cosine_annealing"}:
+        eta_min = cfg.get("eta_min", lr * 0.01)
+        t_max = cfg.get("cosine_t_max", cfg.max_epoch + 1)
+        scheduler = lr_scheduler.CosineAnnealingLR(optimizer, T_max=t_max, eta_min=eta_min)
+    elif lr_adjust == "step":
+        step_size = cfg.get("step_size", 100)
+        gamma = cfg.get("gamma", 0.90)
+        scheduler = lr_scheduler.StepLR(optimizer, step_size=step_size, gamma=gamma)
+    else:
+        raise ValueError(f"Unsupported lr_adjust: {cfg.lr_adjust}. Use cosine/fix/step.")
 
     # Tensorboard writer
     log_dir = os.path.join("logs", cfg.exp_name)
@@ -156,7 +172,7 @@ def main():
         mkdirs(log_dir)
     writer = SummaryWriter(log_dir=log_dir)
 
-    print("Start training TextGraph_welcomeMEddpnew::--")
+    print("Start training")
     for epoch in range(cfg.start_epoch, cfg.start_epoch + cfg.max_epoch + 1):
         train(model, train_loader, criterion, scheduler, optimizer, epoch, writer)  # train
         scheduler.step()

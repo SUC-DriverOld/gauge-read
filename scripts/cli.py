@@ -22,7 +22,7 @@ def main():
     # Model Paths
     parser.add_argument("--yolo", type=str, default="pretrain/best.pt", help="Path to YOLO weights")
     parser.add_argument("--stn", type=str, default="logs/stn/stn_ep50_loss0.0108.pth", help="Path to STN weights")
-    parser.add_argument("--textnet", type=str, default="pretrain/textgraph_vgg_100.pth", help="Path to TextNet weights")
+    parser.add_argument("--textnet", type=str, default="pretrain/textgraph_convnext_tiny_100.pth", help="Path to TextNet weights")
 
     # Flags
     parser.add_argument("--use-yolo", action="store_true", help="Enable YOLO detection")

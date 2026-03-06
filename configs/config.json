@@ -6,7 +6,7 @@
         "num_workers": 0
     },
     "Experiment": {
-        "exp_name": "meter_data_multimodal",
+        "exp_name": "multimodal_convnext",
         "save_dir": "logs",
         "vis_dir": "./vis/",
         "output_dir": "output",
@@ -15,7 +15,7 @@
         "viz": false
     },
     "Model": {
-        "net": "vgg",
+        "net": "convnext_tiny",
         "use_multimodal": true,
         "rescale": 255.0,
         "means": [0.485, 0.456, 0.406],
@@ -32,19 +32,21 @@
         "stn_model_path": "logs\\stn_convnext\\ep2_loss0.1756.pth"
     },
     "Predict": {
-        "model_path": "logs\\meter_data_multimodal\\textgraph_vgg_25.pth",
+        "model_path": "logs\\multimodal_convnext\\textgraph_convnext_tiny_25.pth",
         "use_yolo": true,
         "use_stn": true
     },
     "Training": {
-        "max_epoch": 200,
+        "max_epoch": 100,
         "start_epoch": 0,
         "batch_size": 2,
         "lr": 1e-4,
-        "lr_adjust": "fix",
+        "lr_adjust": "cosine",
         "stepvalues": [],
-        "optim": "Adam",
-        "weight_decay": 0.0,
+        "optim": "AdamW",
+        "weight_decay": 0.01,
+        "eta_min": 1e-6,
+        "cosine_t_max": 101,
         "gamma": 0.1,
         "momentum": 0.9,
         "save_freq": 5,
