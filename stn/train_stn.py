@@ -124,7 +124,7 @@ def train(args):
 
 if __name__ == "__main__":
     parser = ArgumentParser()
-    parser.add_argument("--exp_name", type=str, default="stn_new")
+    parser.add_argument("--exp_name", type=str, default="stn_convnext")
     parser.add_argument("--resume_path", type=str, default=None)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=16)

@@ -6,8 +6,9 @@ import torchvision.models as models
 class STNModel(nn.Module):
     def __init__(self, pretrained=True):
         super(STNModel, self).__init__()
-        self.backbone = models.resnet50(pretrained=pretrained)
-        self.backbone.fc = nn.Linear(2048, 10)
+        self.backbone = models.convnext_tiny(pretrained=pretrained)
+        in_features = self.backbone.classifier[2].in_features
+        self.backbone.classifier[2] = nn.Linear(in_features, 10)
 
     def forward(self, x):
         out = self.backbone(x)
@@ -24,7 +25,6 @@ class STNLoss(nn.Module):
     def __init__(self):
         super(STNLoss, self).__init__()
         self.l1_loss = nn.L1Loss()
-        # 可以用不同的权重平衡矩阵回归损失和圆心坐标回归损失
         self.center_weight = 10.0
 
     def forward(self, pred_st, Minv_gt, pred_center, center_gt):
