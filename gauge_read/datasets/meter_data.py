@@ -172,7 +172,7 @@ class MeterDataset(TextDataset):
         return len(self.dataset)
 
 
-class ClockSyn(Dataset):
+class MeterSyn(Dataset):
     def __init__(self, size=80000, use_homography=True, use_artefacts=True, use_arguments=True):
         self.size = size
         self.use_homography = use_homography

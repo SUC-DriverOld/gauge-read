@@ -9,7 +9,7 @@ from argparse import ArgumentParser
 from torch.utils.data import DataLoader
 
 from gauge_read.utils.tools import warp, warp_points, draw_points_on_batch
-from gauge_read.datasets.meter_data import ClockSyn, STNTest
+from gauge_read.datasets.meter_data import MeterSyn, STNTest
 from gauge_read.models.stn import STNModel
 from gauge_read.models.loss import STNLoss
 
@@ -18,7 +18,7 @@ def train(args):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     writer = SummaryWriter(logdir=f"logs/{args.exp_name}")
 
-    trn_dataset = ClockSyn(
+    trn_dataset = MeterSyn(
         size=args.step * args.batch_size,
         use_homography=(not args.disable_homography),
         use_artefacts=(not args.disable_artefacts),
