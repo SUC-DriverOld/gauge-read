@@ -1,4 +1,5 @@
 import traceback
+import os
 import torch
 import cv2
 import numpy as np
@@ -35,8 +36,20 @@ class GaugeAppModel:
         self.current_end_value = 0.0  # ocr result or user input end val
         self.current_ratio = 0.0
         self.scale_range = 1.6  # Default, maybe user should input this? Or inferred.
+        self.yolo_weights_path = None
 
     def load_models(self, textnet_path, stn_path=None, yolo_path=None):
+        textnet_path = textnet_path or cfg.predict.get("model_path", "")
+        stn_path = stn_path if stn_path is not None else cfg.data.get("stn_model_path", "")
+        yolo_path = yolo_path or cfg.predict.get("yolo_model_path", "")
+
+        if not textnet_path or not os.path.exists(textnet_path):
+            self.textnet = None
+            self.detector = None
+            msg = f"读数模型文件不存在: {textnet_path}"
+            gr.Error(msg)
+            raise FileNotFoundError(msg)
+
         # Load TextNet
         print(f"Loading TextNet from {textnet_path}")
         self.textnet = TextNet(is_training=False, backbone=cfg.model.net)
@@ -55,7 +68,10 @@ class GaugeAppModel:
             model_dict.update(pretrained_dict)
             self.textnet.load_state_dict(model_dict)
         except Exception as e:
-            gr.Error(f"无法加载读数模型: {str(e)}")
+            self.textnet = None
+            self.detector = None
+            msg = f"无法加载读数模型: {str(e)}"
+            gr.Error(msg)
 
         self.textnet = self.textnet.to(self.device)
         self.textnet.eval()
@@ -68,22 +84,25 @@ class GaugeAppModel:
                 self.stn = STNTransformer(stn_path, device=self.device)
             except Exception as e:
                 gr.Error(f"无法加载STN模型: {str(e)}")
+                self.stn = None
         else:
             self.stn = None
 
         # Load YOLO
         try:
             print(f"Loading YOLO Detector from {yolo_path if yolo_path else 'default'}...")
-            self.yolo_detector = Detector(weights=yolo_path)
+            self.yolo_detector = Detector(weights=yolo_path if yolo_path else None)
+            self.yolo_weights_path = yolo_path if yolo_path else cfg.predict.get("yolo_model_path", "")
         except Exception as e:
             gr.Error(f"无法加载YOLO模型: {str(e)}")
             self.yolo_detector = None
+            self.yolo_weights_path = None
 
-        gr.Info("模型加载完成")
+        gr.Info(f"模型加载完成\n读数模型：{textnet_path}\nSTN模型：{stn_path if stn_path else 'disabled'}\nYOLO模型：{self.yolo_weights_path if self.yolo_detector is not None else 'failed'}")
 
     def process_image(self, input_image, use_stn=True, use_yolo=False):
-        if input_image is None or self.textnet is None:
-            return None, "模型未加载或未上传图片", 0.0, 0.0
+        if self.textnet is None:
+            return None, "模型未加载", 0.0, 0.0
 
         # Convert to numpy/cv2 if PIL
         if isinstance(input_image, Image.Image):
@@ -99,7 +118,7 @@ class GaugeAppModel:
         meter_img = image
         if use_yolo:
             if self.yolo_detector is None:
-                return None, "YOLO模型未正确加载", 0.0, 0.0
+                return None, "YOLO模型未正确加载，请先选择YOLO模型并点击加载模型", 0.0, 0.0
             # Assuming 'index' param in detector.detect is just for debug print/mask saving
             # We pass "web_upload"
             _, _, _, meter_list = self.yolo_detector.detect(image, "web_upload")
@@ -189,17 +208,26 @@ class GaugeAppModel:
         self.current_center = predicted_center
         # Note: current logic assumes P1 is always 0.
         self.current_start_value = 0.0
+        ocr_error = False
 
         # Calculate initial reading
         try:
             # Try to convert OCR text to number
             if isinstance(pred_transcripts, str):
                 clean_text = "".join(filter(lambda x: x.isdigit() or x == ".", pred_transcripts))
-                self.current_end_value = float(clean_text) if clean_text else 0.0
+                if clean_text:
+                    self.current_end_value = float(clean_text)
+                else:
+                    ocr_error = True
+                    self.current_end_value = 0.0
+            else:
+                ocr_error = True
+                self.current_end_value = 0.0
         except ValueError:
             self.current_end_value = 0.0
+            ocr_error = True
 
-        val = self.recalculate()
+        val = self.recalculate(ocr_error)
 
         return self.draw_visualization(), val, self.current_start_value, self.current_end_value
 
@@ -230,7 +258,11 @@ class GaugeAppModel:
 
         return [pt1, pt2]
 
-    def recalculate(self):
+    def recalculate(self, ocr_error=False):
+        if self.textnet is None or self.detector is None:
+            return "模型未加载"
+        if self.current_image is None:
+            return "请先运行推理"
         if not self.current_std_points or len(self.current_std_points) < 2:
             return "缺少标定点"
         if not self.current_pointer_line:
@@ -245,6 +277,8 @@ class GaugeAppModel:
             getattr(self, "current_center", None),
         )
         self.current_ratio = ratio
+        if ocr_error:
+            return "OCR error, fallback to ratio-based reading: {:.2f}".format(val)
 
         return val
 
@@ -300,6 +334,11 @@ class GaugeAppModel:
         return img
 
     def update_point(self, point_type, x, y):
+        if self.textnet is None or self.detector is None:
+            return gr.skip(), "模型未加载"
+        if self.current_image is None:
+            return gr.skip(), "请先运行推理"
+
         x, y = int(x), int(y)
         if point_type == "start":
             if not self.current_std_points:
@@ -323,6 +362,11 @@ class GaugeAppModel:
         return self.draw_visualization(), self.recalculate()
 
     def update_start_val(self, text):
+        if self.textnet is None or self.detector is None:
+            return gr.skip(), "模型未加载"
+        if self.current_image is None:
+            return gr.skip(), "请先运行推理"
+
         try:
             self.current_start_value = float(text)
         except ValueError:
@@ -330,6 +374,11 @@ class GaugeAppModel:
         return self.draw_visualization(), self.recalculate()
 
     def update_end_val(self, text):
+        if self.textnet is None or self.detector is None:
+            return gr.skip(), "模型未加载"
+        if self.current_image is None:
+            return gr.skip(), "请先运行推理"
+
         try:
             self.current_end_value = float(text)
         except ValueError:

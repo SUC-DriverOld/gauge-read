@@ -16,20 +16,27 @@ app_logic = GaugeAppModel()
 def get_model_files(directory):
     if not os.path.exists(directory):
         return []
-    return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".pth")]
+    valid_ext = {".pt", ".pth"}
+    files = []
+    for f in os.listdir(directory):
+        p = os.path.join(directory, f)
+        if os.path.isfile(p) and os.path.splitext(f)[1].lower() in valid_ext:
+            files.append(p)
+    return sorted(files)
 
 
-ckpt_dir = os.path.join(repo_root, "pretrain")
-log_dir = os.path.join(repo_root, "logs")
-stn_dir = os.path.join(log_dir, "stn_convnext")
+meter_dir = os.path.join(repo_root, "pretrain", "meter")
+stn_dir = os.path.join(repo_root, "pretrain", "stn")
+yolo_dir = os.path.join(repo_root, "pretrain", "yolo")
 
-model_options = get_model_files(ckpt_dir) + get_model_files(os.path.join(log_dir, "multimodal_convnext"))
+model_options = get_model_files(meter_dir)
 stn_options = get_model_files(stn_dir)
+yolo_options = get_model_files(yolo_dir)
 
 
-def load_models_ui(model_path, stn_path):
-    app_logic.load_models(model_path, stn_path)
-    return model_path, stn_path
+def load_models_ui(model_path, stn_path, yolo_path):
+    app_logic.load_models(model_path, stn_path, yolo_path)
+    return model_path, stn_path, yolo_path
 
 
 def process_ui(image, use_stn, use_yolo):
@@ -44,15 +51,15 @@ def update_point_ui(evt: gr.SelectData, mode):
     x, y = evt.index[0], evt.index[1]
 
     point_type = "none"
-    if mode == "移动起始点":
+    if mode == "起始点":
         point_type = "start"
-    elif mode == "移动结束点":
+    elif mode == "结束点":
         point_type = "end"
-    elif mode == "移动指针尖端":
+    elif mode == "指针尖端":
         point_type = "pointer_tip"
-    elif mode == "移动指针根部":
+    elif mode == "指针根部":
         point_type = "pointer_root"
-    elif mode == "移动圆心点":
+    elif mode == "圆心点":
         point_type = "center"
 
     if point_type != "none":
@@ -76,33 +83,45 @@ with gr.Blocks(title="模拟仪表读数系统") as demo:
     gr.HTML("""<h1 style="text-align: center;">模拟仪表读数系统</h1>""")
     with gr.Group():
         with gr.Row():
-            with gr.Column():
+            model_dropdown = gr.Dropdown(
+                choices=model_options, label="仪表读数模型", value=model_options[0] if model_options else None
+            )
+            stn_dropdown = gr.Dropdown(
+                choices=stn_options, label="STN矫正模型", value=stn_options[0] if stn_options else None
+            )
+            yolo_dropdown = gr.Dropdown(
+                choices=yolo_options, label="YOLO检测模型", value=yolo_options[0] if yolo_options else None
+            )
+        load_btn = gr.Button("加载模型", variant="primary")
+    with gr.Tabs():
+        with gr.TabItem("单图推理"):
+            with gr.Group():
                 with gr.Row():
-                    model_dropdown = gr.Dropdown(
-                        choices=model_options, label="仪表读数模型", value=model_options[0] if model_options else None
-                    )
-                    stn_dropdown = gr.Dropdown(
-                        choices=stn_options, label="STN矫正模型", value=stn_options[0] if stn_options else None
-                    )
-                load_btn = gr.Button("加载模型", variant="primary")
-                input_image = gr.Image(label="上传仪表图片", type="pil", height=500)
-                with gr.Row():
-                    use_stn_chk = gr.Checkbox(label="启用STN矫正", value=True)
-                    use_yolo_chk = gr.Checkbox(label="启用YOLO检测", value=True)
-                run_btn = gr.Button("开始推理", variant="primary")
-            with gr.Column():
-                edit_mode = gr.Radio(
-                    choices=["未选择", "移动起始点", "移动结束点", "移动指针尖端", "移动指针根部", "移动圆心点"],
-                    value="未选择",
-                    label="修正模式 (选择要移动的点然后点击图片)",
-                )
-                result_image = gr.Image(label="处理后的图片 (点击编辑)", interactive=False, height=450)
-                with gr.Row():
-                    start_val_input = gr.Textbox(label="起始值", value="0", interactive=True)
-                    end_val_input = gr.Textbox(label="结束值", value="0", interactive=True)
-                result_val = gr.Textbox(label="读数结果", lines=1, scale=2)
+                    with gr.Column():
+                        input_image = gr.Image(label="上传仪表图片", type="pil", height=500)
+                        with gr.Row():
+                            use_stn_chk = gr.Checkbox(label="启用STN矫正", value=True)
+                            use_yolo_chk = gr.Checkbox(label="启用YOLO检测", value=True)
+                        run_btn = gr.Button("开始推理", variant="primary")
+                    with gr.Column():
+                        edit_mode = gr.Radio(
+                            choices=["未选择", "起始点", "结束点", "指针尖端", "指针根部", "圆心点"],
+                            value="未选择",
+                            label="修正模式 (选择要移动的点然后点击图片)",
+                        )
+                        result_image = gr.Image(label="处理后的图片 (点击编辑)", interactive=False, height=410)
+                        with gr.Row():
+                            start_val_input = gr.Textbox(label="起始值 (可手动编辑)", value="0", interactive=True)
+                            end_val_input = gr.Textbox(label="结束值 (可手动编辑)", value="0", interactive=True)
+                            result_val = gr.Textbox(label="读数结果", lines=1, scale=2)
+        with gr.TabItem("批量推理"):
+            gr.Markdown("正在开发中...")
 
-    load_btn.click(load_models_ui, inputs=[model_dropdown, stn_dropdown], outputs=[model_dropdown, stn_dropdown])
+    load_btn.click(
+        load_models_ui,
+        inputs=[model_dropdown, stn_dropdown, yolo_dropdown],
+        outputs=[model_dropdown, stn_dropdown, yolo_dropdown],
+    )
     run_btn.click(
         process_ui,
         inputs=[input_image, use_stn_chk, use_yolo_chk],
