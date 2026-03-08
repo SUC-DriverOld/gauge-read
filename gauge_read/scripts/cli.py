@@ -12,20 +12,21 @@ if repo_root not in sys.path:
     sys.path.append(repo_root)
 
 from gauge_read.webui.app_logic import GaugeAppModel
+from gauge_read.utils.config import config as cfg, load_config
 
 
 def main():
     parser = argparse.ArgumentParser(description="Gauge Reader CLI")
 
+    parser.add_argument("-c", "--config", type=str, default=None, help="Path to config YAML")
+
     # Inputs
     parser.add_argument("image_path", type=str, help="Path to the gauge image")
 
     # Model Paths
-    parser.add_argument("--yolo", type=str, default="pretrain/best.pt", help="Path to YOLO weights")
-    parser.add_argument("--stn", type=str, default="logs/stn/stn_ep50_loss0.0108.pth", help="Path to STN weights")
-    parser.add_argument(
-        "--textnet", type=str, default="pretrain/textgraph_convnext_tiny_100.pth", help="Path to TextNet weights"
-    )
+    parser.add_argument("--yolo", type=str, default=None, help="Path to YOLO weights")
+    parser.add_argument("--stn", type=str, default=None, help="Path to STN weights")
+    parser.add_argument("--textnet", type=str, default=None, help="Path to TextNet weights")
 
     # Flags
     parser.add_argument("--use-yolo", action="store_true", help="Enable YOLO detection")
@@ -39,6 +40,13 @@ def main():
     parser.add_argument("--output", type=str, default=None, help="Path to save result image (optional)")
 
     args = parser.parse_args()
+
+    if args.config:
+        load_config(args.config)
+
+    yolo_path = args.yolo or cfg.predict.get("yolo_model_path", "pretrain/best.pt")
+    stn_path = args.stn if args.stn is not None else cfg.data.get("stn_model_path", "")
+    textnet_path = args.textnet or cfg.predict.get("model_path", "")
 
     # Validate Image
     if not os.path.exists(args.image_path):
@@ -57,7 +65,7 @@ def main():
 
     try:
         app_logic = GaugeAppModel()
-        load_res = app_logic.load_models(textnet_path=args.textnet, stn_path=args.stn, yolo_path=args.yolo)
+        app_logic.load_models(textnet_path=textnet_path, stn_path=stn_path, yolo_path=yolo_path)
     except Exception as e:
         print(json.dumps({"status": "error", "message": f"Model initialization failed: {str(e)}"}))
         sys.exit(1)
