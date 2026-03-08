@@ -20,8 +20,16 @@ data:
 
 predict:
   model_path: logs/multimodal_convnext/textgraph_convnext_tiny_25.pth
+  data_dir: datas/demo
   use_yolo: true
   use_stn: true
+  yolo_model_path: pretrain/best.pt
+  yolo_imgsz: 640
+  yolo_conf: 0.6
+  yolo_iou: 0.3
+  yolo_max_det: 160
+  yolo_device: auto
+  yolo_half: null
 
 training:
   seed: 114514

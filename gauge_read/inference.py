@@ -1,18 +1,15 @@
+import argparse
 import os
-from random import randint
 
 import cv2
 import numpy as np
 import torch
-from yolov5.models.experimental import attempt_load
-from yolov5.utils.augmentations import letterbox
-from yolov5.utils.general import non_max_suppression, scale_coords
-from yolov5.utils.torch_utils import select_device
+from ultralytics import YOLO
 
 from gauge_read.models.textnet import TextNet
 from gauge_read.utils.stn_transform import STNTransformer
 from gauge_read.utils.augmentation import BaseTransform
-from gauge_read.utils.config import config as cfg, print_config
+from gauge_read.utils.config import config as cfg, load_config, print_config
 from gauge_read.utils.converter import StringLabelConverter
 from gauge_read.utils.tools import to_device
 from gauge_read.utils.reader import MeterReader, TextDetector
@@ -20,94 +17,99 @@ from gauge_read.utils.reader import MeterReader, TextDetector
 
 class Detector(object):
     def __init__(self, weights=None):
-        self.img_size = 640
-        self.threshold = 0.6
-        self.max_frame = 160
-        self.weights = weights if weights else "pretrain/best.pt"
+        yolo_cfg = cfg.get("predict", {})
+        self.img_size = int(yolo_cfg.get("yolo_imgsz", 640))
+        self.threshold = float(yolo_cfg.get("yolo_conf", 0.6))
+        self.iou_threshold = float(yolo_cfg.get("yolo_iou", 0.3))
+        self.max_det = int(yolo_cfg.get("yolo_max_det", 160))
+        self.device = yolo_cfg.get("yolo_device", "auto")
+        self.half = yolo_cfg.get("yolo_half", None)
+        self.weights = weights if weights else yolo_cfg.get("yolo_model_path", "pretrain/best.pt")
         self.init_model()
 
     def init_model(self):
-        self.device = "0" if torch.cuda.is_available() else "cpu"
-        self.device = select_device(self.device)
-        model = attempt_load(self.weights, map_location=self.device)
-        model.to(self.device).eval()
-        model.half()
-        self.m = model
-        self.names = model.module.names if hasattr(model, "module") else model.names
-        self.colors = [(randint(0, 255), randint(0, 255), randint(0, 255)) for _ in self.names]
+        if self.device in (None, "", "auto"):
+            self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-    def preprocess(self, img):
-        img0 = img.copy()
-        img = letterbox(img, new_shape=self.img_size)[0]
-        img = img[:, :, ::-1].transpose(2, 0, 1)
-        img = np.ascontiguousarray(img)
-        img = torch.from_numpy(img).to(self.device)
-        img = img.half()
-        img /= 255.0
-        if img.ndimension() == 3:
-            img = img.unsqueeze(0)
-        return img0, img
+        if self.half is None:
+            # Default to FP16 on CUDA and FP32 on CPU.
+            self.use_half = str(self.device).startswith("cuda")
+        else:
+            self.use_half = bool(self.half)
 
-    def plot_bboxes(self, image, bboxes, line_thickness=None):
-        tl = line_thickness or round(0.002 * (image.shape[0] + image.shape[1]) / 2) + 1
-        for x1, y1, x2, y2, cls_id, conf in bboxes:
-            color = self.colors[self.names.index(cls_id)]
-            c1, c2 = (x1, y1), (x2, y2)
-            cv2.rectangle(image, c1, c2, color, thickness=tl, lineType=cv2.LINE_AA)
-            tf = max(tl - 1, 1)
-            t_size = cv2.getTextSize(cls_id, 0, fontScale=tl / 3, thickness=tf)[0]
-            c2 = c1[0] + t_size[0], c1[1] - t_size[1] - 3
-            cv2.rectangle(image, c1, c2, color, -1, cv2.LINE_AA)
-            cv2.putText(
-                image,
-                "{} ID-{:.2f}".format(cls_id, conf),
-                (c1[0], c1[1] - 2),
-                0,
-                tl / 3,
-                [225, 255, 255],
-                thickness=tf,
-                lineType=cv2.LINE_AA,
-            )
-        return image
+        self.m = YOLO(self.weights)
+        self.names = self.m.names
+
+    def _get_label(self, cls_id):
+        if isinstance(self.names, dict):
+            return self.names.get(cls_id, str(cls_id))
+        if isinstance(self.names, (list, tuple)) and 0 <= cls_id < len(self.names):
+            return self.names[cls_id]
+        return str(cls_id)
 
     def detect(self, im, _):
-        im0, img = self.preprocess(im)
+        im0 = im.copy()
+        results = self.m.predict(
+            source=im0,
+            imgsz=self.img_size,
+            conf=self.threshold,
+            iou=self.iou_threshold,
+            device=self.device,
+            half=self.use_half,
+            max_det=self.max_det,
+            verbose=False,
+        )
 
-        pred = self.m(img, augment=False)[0]
-        pred = pred.float()
-        pred = non_max_suppression(pred, self.threshold, 0.3)
-
-        pred_boxes = []
         image_info = {}
         count = 0
-
         digital_list, meter_list = [], []
-        for det in pred:
-            if det is not None and len(det):
-                det[:, :4] = scale_coords(img.shape[2:], det[:, :4], im0.shape).round()
 
-                for *x, conf, cls_id in det:
-                    lbl = self.names[int(cls_id)]
+        if not results:
+            return im0, image_info, digital_list, meter_list
 
-                    x1, y1 = int(x[0]), int(x[1])
-                    x2, y2 = int(x[2]), int(x[3])
+        result = results[0]
+        boxes = result.boxes
+        annotated = result.plot()
 
-                    region = im0[y1:y2, x1:x2]
-                    if lbl == "meter":
-                        meter_list.append(region)
-                    else:
-                        digital_list.append(region)
+        if boxes is None or len(boxes) == 0:
+            return annotated, image_info, digital_list, meter_list
 
-                    pred_boxes.append((x1, y1, x2, y2, lbl, conf))
-                    count += 1
-                    key = "{}-{:02}".format(lbl, count)
-                    image_info[key] = ["{}x{}".format(x2 - x1, y2 - y1), np.round(float(conf), 3)]
+        xyxy = boxes.xyxy.detach().cpu().numpy().astype(np.int32)
+        confs = boxes.conf.detach().cpu().numpy()
+        classes = boxes.cls.detach().cpu().numpy().astype(np.int32)
+        h, w = im0.shape[:2]
 
-        im = self.plot_bboxes(im, pred_boxes)
-        return im, image_info, digital_list, meter_list
+        for i in range(len(xyxy)):
+            x1, y1, x2, y2 = xyxy[i].tolist()
+            cls_id = int(classes[i])
+            conf = float(confs[i])
+            lbl = self._get_label(cls_id)
+
+            # Clip coordinates to image bounds to avoid invalid slicing.
+            x1 = max(0, min(x1, w - 1))
+            y1 = max(0, min(y1, h - 1))
+            x2 = max(0, min(x2, w))
+            y2 = max(0, min(y2, h))
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            region = im0[y1:y2, x1:x2]
+            if lbl == "pointer":
+                meter_list.append(region)
+            else:
+                digital_list.append(region)
+
+            count += 1
+            key = "{}-{:02}".format(lbl, count)
+            image_info[key] = ["{}x{}".format(x2 - x1, y2 - y1), np.round(conf, 3)]
+
+        return annotated, image_info, digital_list, meter_list
 
 
-def main():
+def main(args):
+    if args.config:
+        load_config(args.config)
+
     print_config(cfg)
 
     stn_transformer = None
@@ -116,7 +118,10 @@ def main():
         print(f"Initializing STN from {stn_model_path}")
         stn_transformer = STNTransformer(stn_model_path, device=cfg.system.device)
 
-    predict_dir = "datas/demo"
+    predict_dir = args.data_dir or cfg.predict.get("data_dir", "datas/demo")
+
+    if not os.path.isdir(predict_dir):
+        raise NotADirectoryError(f"Predict directory not found: {predict_dir}")
 
     model = TextNet(is_training=False, backbone=cfg.model.net)
     model_path = cfg.predict.model_path
@@ -210,4 +215,20 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description="Gauge inference")
+    parser.add_argument(
+        "-c",
+        "--config",
+        type=str,
+        default=None,
+        help="Path to YAML config file. If omitted, default config is used.",
+    )
+    parser.add_argument(
+        "-d",
+        "--data-dir",
+        type=str,
+        default=None,
+        help="Directory containing images to predict. Overrides config/default path.",
+    )
+    args = parser.parse_args()
+    main(args)

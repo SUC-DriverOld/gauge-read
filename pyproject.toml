@@ -21,6 +21,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "gradio>=6.5.0",
     "pywebview>=6.1",
+    "ultralytics==8.4.21"
 ]
 
 [tool.uv.sources]
