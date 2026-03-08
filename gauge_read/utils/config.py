@@ -98,11 +98,6 @@ def update_config(cfg, extra_config):
         if k == "config" or v is None:
             continue
 
-        # Map common CLI overrides into nested sections.
-        if k == "resume":
-            cfg.experiment.resume = v
-            continue
-
         # Fall back to top-level assignment for future extension.
         cfg[k] = v
     _set_runtime_fields(cfg)

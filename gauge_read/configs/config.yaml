@@ -5,7 +5,6 @@ system:
 experiment:
   exp_name: multimodal_convnext
   save_dir: logs
-  resume: ""
 
 model:
   net: convnext_tiny

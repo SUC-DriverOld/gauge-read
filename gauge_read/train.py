@@ -33,7 +33,6 @@ converter = StringLabelConverter()
 def parse_args():
     parser = argparse.ArgumentParser(description="Train Gauge Read TextNet")
     parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
-    parser.add_argument("--resume", type=str, default=None, help="Resume checkpoint path")
     return parser.parse_args()
 
 
@@ -50,12 +49,6 @@ def save_model(model, epoch, lr, optimzer):
         "optimizer": optimzer.state_dict(),
     }
     torch.save(state_dict, save_path)
-
-
-def load_model(model, model_path):
-    print("Loading from {}".format(model_path))
-    state_dict = torch.load(model_path)
-    model.load_state_dict(state_dict["model"])
 
 
 def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer):
@@ -149,9 +142,6 @@ def main():
 
     if cfg.system.cuda:
         cudnn.benchmark = True
-
-    if cfg.experiment.resume:
-        load_model(model, cfg.experiment.resume)
 
     criterion = TextLoss()
 

@@ -38,9 +38,6 @@ def train(args):
     scheduler = CosineAnnealingLR(optimizer, T_max=max(1, args.epochs * len(trn_loader)), eta_min=args.lr_min)
     criterion = STNLoss()
 
-    if args.resume_path:
-        model_stn.load_state_dict(torch.load(args.resume_path))
-
     total_loss = 0.0
     best_loss = float("inf")
     for ep in range(args.epochs):
@@ -123,7 +120,6 @@ def train(args):
 if __name__ == "__main__":
     parser = ArgumentParser()
     parser.add_argument("--exp_name", type=str, default="stn_convnext")
-    parser.add_argument("--resume_path", type=str, default=None)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--batch_size", type=int, default=16)
     parser.add_argument("--lr", type=float, default=1e-4)
