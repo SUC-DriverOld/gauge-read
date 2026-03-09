@@ -1,46 +1,21 @@
-import cv2
 import torch
 import numpy as np
 
 
-def roi_transform(feature, box, size=(32, 180)):
-    resize_h, resize_w = size
-    x1, y1, x2, y2, x3, y3, x4, y4 = box
-    # rotated_rect = cv2.minAreaRect(np.array([[x1, y1], [x2, y2], [x3, y3], [x4, y4]]))
-    # box_w, box_h = rotated_rect[1][0], rotated_rect[1][1]
+def _param2theta_batch(param, w, h):
+    bsz = param.shape[0]
+    ones_row = torch.tensor([0.0, 0.0, 1.0], dtype=param.dtype, device=param.device).view(1, 1, 3).repeat(bsz, 1, 1)
+    param3 = torch.cat([param, ones_row], dim=1)
+    param_inv = torch.linalg.inv(param3)
 
-    width = feature.shape[2]
-    height = feature.shape[1]
-
-    mapped_x1, mapped_y1 = (0, 0)
-    mapped_x4, mapped_y4 = (0, resize_h)
-
-    mapped_x2, mapped_y2 = (resize_w, 0)
-
-    src_pts = np.float32([(x1, y1), (x2, y2), (x4, y4)])
-    dst_pts = np.float32([(mapped_x1, mapped_y1), (mapped_x2, mapped_y2), (mapped_x4, mapped_y4)])
-
-    affine_matrix = cv2.getAffineTransform(src_pts.astype(np.float32), dst_pts.astype(np.float32))
-    affine_matrix = param2theta(affine_matrix, width, height)
-
-    affine_matrix *= 1e20  # cancel the error when type conversion
-    affine_matrix = torch.tensor(affine_matrix, device=feature.device, dtype=torch.float)
-    affine_matrix /= 1e20
-
-    grid = torch.nn.functional.affine_grid(affine_matrix.unsqueeze(0), feature.unsqueeze(0).size(), align_corners=True)
-    feature_rotated = torch.nn.functional.grid_sample(feature.unsqueeze(0), grid, align_corners=True)
-    feature_rotated = feature_rotated[:, :, 0:resize_h, 0:resize_w]
-
-    feature_rotated = feature_rotated.squeeze(0)
-
-    # Compatibility handling:
-    # If 3 channels (RGB), convert to Grayscale (1 channel) for original CRNN.
-    # If 4 channels (Multimodal), keep all channels.
-    if feature_rotated.shape[0] == 3:
-        gray_scale_img = rgb_to_grayscale(feature_rotated).unsqueeze(0)
-        return gray_scale_img
-    else:
-        return feature_rotated
+    theta = torch.zeros((bsz, 2, 3), dtype=param.dtype, device=param.device)
+    theta[:, 0, 0] = param_inv[:, 0, 0]
+    theta[:, 0, 1] = param_inv[:, 0, 1] * h / w
+    theta[:, 0, 2] = param_inv[:, 0, 2] * 2 / w + theta[:, 0, 0] + theta[:, 0, 1] - 1
+    theta[:, 1, 0] = param_inv[:, 1, 0] * w / h
+    theta[:, 1, 1] = param_inv[:, 1, 1]
+    theta[:, 1, 2] = param_inv[:, 1, 2] * 2 / h + theta[:, 1, 0] + theta[:, 1, 1] - 1
+    return theta
 
 
 def param2theta(param, w, h):
@@ -57,25 +32,43 @@ def param2theta(param, w, h):
     return theta
 
 
-def rgb_to_grayscale(img):
-    """Convert the given RGB Image Tensor to Grayscale.
-    For RGB to Grayscale conversion, ITU-R 601-2 luma transform is performed which
-    is L = R * 0.2989 + G * 0.5870 + B * 0.1140
-    Args:
-        img (Tensor): Image to be converted to Grayscale in the form [C, H, W].
-    Returns:
-        Tensor: Grayscale image.
-    """
-    if img.shape[0] != 3:
-        raise TypeError("Input Image does not contain 3 Channels")
-
-    return (0.2989 * img[0] + 0.5870 * img[1] + 0.1140 * img[2]).to(img.dtype)
-
-
 def batch_roi_transform(feature_map, boxes, mapping, size=(32, 180)):
-    rois = []
-    for img_index, box in zip(mapping, boxes):
-        feature = feature_map[img_index]
-        rois.append(roi_transform(feature, box, size))
-    rois = torch.stack(rois, dim=0)
+    resize_h, resize_w = size
+    if len(boxes) == 0:
+        ch = 1 if feature_map.shape[1] == 3 else feature_map.shape[1]
+        return torch.empty((0, ch, resize_h, resize_w), device=feature_map.device, dtype=feature_map.dtype)
+
+    device = feature_map.device
+    dtype = feature_map.dtype
+    mapping_t = torch.as_tensor(mapping, device=device, dtype=torch.long)
+    boxes_t = torch.as_tensor(boxes, device=device, dtype=dtype).view(-1, 8)
+
+    feats = feature_map[mapping_t]
+    bsz, c, h, w = feats.shape
+
+    # src points: p1(x1,y1), p2(x2,y2), p4(x4,y4)
+    src = torch.stack(
+        [
+            boxes_t[:, [0, 1]],
+            boxes_t[:, [2, 3]],
+            boxes_t[:, [6, 7]],
+        ],
+        dim=1,
+    )
+    dst = torch.tensor([[0.0, 0.0], [float(resize_w), 0.0], [0.0, float(resize_h)]], device=device, dtype=dtype)
+    dst = dst.unsqueeze(0).repeat(bsz, 1, 1)
+
+    src_homo = torch.cat([src, torch.ones((bsz, 3, 1), device=device, dtype=dtype)], dim=2)
+    # Solve src_homo @ A^T = dst  => A = (solve result)^T, where A maps src -> dst
+    a_t = torch.linalg.solve(src_homo, dst)
+    param = a_t.transpose(1, 2)
+    theta = _param2theta_batch(param, w, h)
+
+    grid = torch.nn.functional.affine_grid(theta, feats.size(), align_corners=True)
+    feat_rot = torch.nn.functional.grid_sample(feats, grid, align_corners=True)
+    rois = feat_rot[:, :, 0:resize_h, 0:resize_w]
+
+    if c == 3:
+        gray = (0.2989 * rois[:, 0] + 0.5870 * rois[:, 1] + 0.1140 * rois[:, 2]).unsqueeze(1)
+        return gray.to(rois.dtype)
     return rois

@@ -104,6 +104,8 @@ class MeterDataset(TextDataset):
             self.dataset.append((f"{image_path}/{image_name}", f"{mask_path}/{mask_name}", f"{mask_path1}/{mask_name}"))
             self.name.append(image_name)
 
+        self.annotation_cache = {}
+
         if cfg.data.get("stn_correction", False):
             # Use CPU for dataset workers to avoid multiprocessing issues with CUDA
             self.stn_transformer = STNTransformer(cfg.data.get("stn_model_path", ""))
@@ -151,11 +153,16 @@ class MeterDataset(TextDataset):
         # Read image data
         image = pil_load_img(image_path)
 
-        try:
-            polygons, transcripts = self.parse_txt(mask_path, mask_path1)
-        except Exception:
-            # print(f"Parse error: {e}")
-            polygons = None
+        cache_key = (mask_path, mask_path1)
+        if cache_key in self.annotation_cache:
+            polygons, transcripts = copy.deepcopy(self.annotation_cache[cache_key])
+        else:
+            try:
+                polygons, transcripts = self.parse_txt(mask_path, mask_path1)
+                self.annotation_cache[cache_key] = (copy.deepcopy(polygons), copy.deepcopy(transcripts))
+            except Exception:
+                polygons = None
+                transcripts = []
 
         # Apply STN correction
         if self.stn_transformer is not None and polygons is not None:

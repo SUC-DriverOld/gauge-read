@@ -28,8 +28,8 @@ class TextDetector(object):
 
 
 class MeterReader(object):
-    def __init__(self):
-        pass
+    def __init__(self, debug=False):
+        self.debug = debug
 
     def compute_reading(self, std_points, pointer_line, start_val=0.0, end_val=0.0, predicted_center=None):
         """
@@ -95,13 +95,14 @@ class MeterReader(object):
     def __call__(self, image, point_mask, dail_mask, word_mask, number, std_point, predicted_center=None):
         img_result = image.copy()
         value = self.find_lines(img_result, point_mask, dail_mask, word_mask, number, std_point, predicted_center)
-        print("value", value)
+        if self.debug:
+            print("value", value)
 
         return value
 
     def find_lines(self, ori_img, pointer_mask, dail_mask, word_mask, number, std_point, predicted_center=None):
         # 实施骨架算法
-        pointer_skeleton = morphology.skeletonize(pointer_mask)
+        pointer_skeleton = morphology.skeletonize(pointer_mask > 0)
         pointer_edges = pointer_skeleton * 255
         pointer_edges = pointer_edges.astype(np.uint8)
         # cv2.imshow("pointer_edges", pointer_edges)
@@ -124,15 +125,14 @@ class MeterReader(object):
         ori_img = cv2.addWeighted(ori_img, 1.0, colored_masks, 0.5, 0)
 
         pointer_lines = cv2.HoughLinesP(pointer_edges, 1, np.pi / 180, 10, np.array([]), minLineLength=10, maxLineGap=400)
-        coin1, coin2 = None, None
-
-        try:
-            for x1, y1, x2, y2 in pointer_lines[0]:
-                coin1 = (x1, y1)
-                coin2 = (x2, y2)
-                cv2.line(ori_img, (x1, y1), (x2, y2), (255, 0, 255), 2)
-        except TypeError:
+        if pointer_lines is None or len(pointer_lines) == 0:
             return "can not detect pointer"
+
+        x1, y1, x2, y2 = pointer_lines[0][0]
+        coin1 = (x1, y1)
+        coin2 = (x2, y2)
+        if self.debug:
+            cv2.line(ori_img, (x1, y1), (x2, y2), (255, 0, 255), 2)
 
         # Default center (image center)
         h, w, _ = ori_img.shape
@@ -142,7 +142,8 @@ class MeterReader(object):
             center = (int(predicted_center[0]), int(predicted_center[1]))
             # Draw predicted center
             cv2.circle(ori_img, center, 5, (0, 0, 255), -1)
-            print(f"Using predicted center from STN: {center}")
+            if self.debug:
+                print(f"Using predicted center from STN: {center}")
         else:
             # Try to calculate a better center using geometry:
             # Intersection of pointer line and the perpendicular bisector of the two scale points
@@ -156,7 +157,7 @@ class MeterReader(object):
                         cv2.circle(ori_img, center, 5, (0, 255, 255), -1)
 
         dis1 = (coin1[0] - center[0]) ** 2 + (coin1[1] - center[1]) ** 2
-        dis2 = (coin2[0] - center[1]) ** 2 + (coin2[1] - center[1]) ** 2
+        dis2 = (coin2[0] - center[0]) ** 2 + (coin2[1] - center[1]) ** 2
         if dis1 <= dis2:
             pointer_line = (coin1, coin2)
         else:
@@ -164,7 +165,7 @@ class MeterReader(object):
 
         # print("pointer_line", pointer_line)
 
-        if std_point == None:
+        if std_point is None:
             return "can not detect dail"
 
         # calculate angle
@@ -175,9 +176,10 @@ class MeterReader(object):
         one = [[pointer_line[0][0], pointer_line[0][1]], [a1[0], a1[1]]]
         two = [[pointer_line[0][0], pointer_line[0][1]], [a2[0], a2[1]]]
         three = [[pointer_line[0][0], pointer_line[0][1]], [pointer_line[1][0], pointer_line[1][1]]]
-        print("one", one)
-        print("two", two)
-        print("three", three)
+        if self.debug:
+            print("one", one)
+            print("two", two)
+            print("three", three)
 
         one = np.array(one)
         two = np.array(two)
@@ -196,27 +198,31 @@ class MeterReader(object):
         # print("flag",flag)
 
         std_ang = self.angle(v1, v2)
-        print("std_result", std_ang)
+        if self.debug:
+            print("std_result", std_ang)
         now_ang = self.angle(v1, v3)
         if flag > 0:
             now_ang = 360 - now_ang
-        print("now_result", now_ang)
+        if self.debug:
+            print("now_result", now_ang)
 
         # calculate value
         ratio = 0.0
         if std_ang != 0:
             ratio = now_ang / std_ang
 
-        print(f"Angle Ratio (Pointer/Full): {ratio:.4f}")
+        if self.debug:
+            print(f"Angle Ratio (Pointer/Full): {ratio:.4f}")
 
-        if number != None and number[0] != "":
+        if number is not None and number[0] != "":
             two_value = float(number[0])
         else:
             # Even if number is missing, show ratio
             font = cv2.FONT_HERSHEY_SIMPLEX
             ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
-            cv2.imshow("result", ori_img)
-            cv2.waitKey(0)
+            if self.debug:
+                cv2.imshow("result", ori_img)
+                cv2.waitKey(0)
             return f"Ratio: {ratio}"
 
         if std_ang * now_ang != 0:
@@ -235,8 +241,9 @@ class MeterReader(object):
         ori_img = cv2.putText(ori_img, str(value), (30, 30), font, 1.2, (255, 0, 255), 2)
         ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
 
-        cv2.imshow("result", ori_img)
-        cv2.waitKey(0)
+        if self.debug:
+            cv2.imshow("result", ori_img)
+            cv2.waitKey(0)
 
         return value
 

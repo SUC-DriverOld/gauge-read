@@ -7,11 +7,8 @@ from gauge_read.models.stn import STNModel
 
 class STNTransformer:
     def __init__(self, model_path, device="cpu"):
-        if STNModel is None:
-            self.model = None
-            return
-
         self.device = device
+        self._norm_cache = {}
         self.model = STNModel(pretrained=False)
 
         if os.path.exists(model_path):
@@ -35,10 +32,14 @@ class STNTransformer:
         self.model.to(device)
         self.model.eval()
 
-    def process_image(self, image):
-        """
-        Pad to square (black filled), resize to 224x224, normalize, convert to tensor
-        """
+    def _get_norm_mats(self, s):
+        if s not in self._norm_cache:
+            N = np.array([[2.0 / s, 0, -1], [0, 2.0 / s, -1], [0, 0, 1]], dtype=np.float32)
+            self._norm_cache[s] = (N, np.linalg.inv(N))
+        return self._norm_cache[s]
+
+    @staticmethod
+    def _pad_to_square(image):
         h, w = image.shape[:2]
         m = max(h, w)
         if len(image.shape) == 3:
@@ -46,6 +47,13 @@ class STNTransformer:
         else:
             canvas = np.zeros((m, m), dtype=image.dtype)
         canvas[:h, :w] = image
+        return canvas, h, w, m
+
+    def process_image(self, image):
+        """
+        Pad to square (black filled), resize to 224x224, normalize, convert to tensor
+        """
+        canvas, _, _, _ = self._pad_to_square(image)
 
         img_resized = cv2.resize(canvas, (224, 224))
         # Convert to tensor: (H, W, C) -> (C, H, W) -> Batch
@@ -57,8 +65,7 @@ class STNTransformer:
         if self.model is None:
             return None, None
 
-        h, w = image.shape[:2]
-        s = max(h, w)
+        s = max(image.shape[:2])
         img_tensor = self.process_image(image)
 
         with torch.no_grad():
@@ -67,9 +74,7 @@ class STNTransformer:
             minv = Minv_pred.squeeze(0).cpu().numpy()  # This is likely for normalized coords [-1, 1]
             center_norm = pred_center.squeeze(0).cpu().numpy()
 
-        N = np.array([[2.0 / s, 0, -1], [0, 2.0 / s, -1], [0, 0, 1]])
-
-        N_inv = np.linalg.inv(N)
+        N, N_inv = self._get_norm_mats(s)
 
         M_pixel_inv = N_inv @ minv @ N
         try:
@@ -90,15 +95,7 @@ class STNTransformer:
         if H_mat is None:
             return image, polygons, None
 
-        h, w = image.shape[:2]
-        m = max(h, w)
-
-        # Create padded canvas
-        if len(image.shape) == 3:
-            canvas = np.zeros((m, m, image.shape[2]), dtype=image.dtype)
-        else:
-            canvas = np.zeros((m, m), dtype=image.dtype)
-        canvas[:h, :w] = image
+        canvas, _, _, m = self._pad_to_square(image)
 
         # Calculate new bounds to encompass the warped image
         corners = np.array([[0, 0], [m, 0], [m, m], [0, m]], dtype=np.float32).reshape(-1, 1, 2)

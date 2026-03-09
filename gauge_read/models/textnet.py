@@ -194,7 +194,7 @@ class TextNet(nn.Module):
         dail_edges = dail_edges.astype(np.uint8)
         dail_contours, _ = cv2.findContours(dail_edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
 
-        # new
+        # Text contours (reused for reference point and recognition ROI)
         text_edges = text_label * 255
         text_edges = text_edges.astype(np.uint8)
         text_contours, _ = cv2.findContours(text_edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
@@ -202,57 +202,41 @@ class TextNet(nn.Module):
         for i in range(len(text_contours)):
             rect = cv2.minAreaRect(text_contours[i])
             ref_point.append((int(rect[0][0]), int(rect[0][1])))
-        # print("ref",ref_point)
 
         std_point = []
         for i in range(len(dail_contours)):
             rect = cv2.minAreaRect(dail_contours[i])
             std_point.append((int(rect[0][0]), int(rect[0][1])))
 
-        # print("std",std_point)
-
         if len(std_point) == 0:
             return pointer_pred, dail_label, text_label, (None, None), None, None
 
         if len(std_point) < 2:
-            # std_point=None
+            if len(ref_point) == 0:
+                return pointer_pred, dail_label, text_label, (None, None), None, None
             std_point.append(ref_point[0])
-            # return pointer_pred, dail_label, text_label, (None, None),[std_point[0],ref_point[0]]
         else:
             if std_point[0][1] >= std_point[1][1]:
                 pass
             else:
                 std_point[0], std_point[1] = std_point[1], std_point[0]
 
-        # print("******",std_point)
+        if len(text_contours) != 0:
+            # Select text contour nearest to std end point.
+            ref_arr = np.array(ref_point, dtype=np.float32)
+            target = np.array(std_point[1], dtype=np.float32)
+            dists = np.sum((ref_arr - target) ** 2, axis=1)
+            index = int(np.argmin(dists))
 
-        word_edges = text_label * 255
-        word_edges = word_edges.astype(np.uint8)  # Ensure it's uint8 for findContours
-        contours, hierarchy = cv2.findContours(word_edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        max_dis = 10000
-        index = 0
-        if len(contours) != 0:
-            for i in range(len(contours)):
-                min_rect = cv2.minAreaRect(contours[i])
-
-                test_point = (min_rect[0][0], min_rect[0][1])
-                dis = (test_point[0] - std_point[1][0]) ** 2 + (test_point[1] - std_point[1][1]) ** 2
-                if dis < max_dis:
-                    max_dis = dis
-                    index = i
-
-            rect_points = cv2.boxPoints(cv2.minAreaRect(contours[index]))
+            rect_points = cv2.boxPoints(cv2.minAreaRect(text_contours[index]))
             bboxes = rect_points.astype(np.int32)
             bboxes = order_points(bboxes)
-            # print("bbox", bboxes)
             boxes = bboxes.reshape(1, 8)
             mapping = [0]
             mapping = np.array(mapping)
             rois = batch_roi_transform(x, boxes[:, :8], mapping)
-            # print("rois",rois.shape)
             preds = self.recognizer(rois)
             preds_size = torch.LongTensor([preds.size(0)] * int(preds.size(1)))
-            # print("*******", preds.shape, preds_size)
 
         else:
             preds = None

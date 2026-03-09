@@ -5,6 +5,9 @@ from gauge_read.utils.config import config as cfg
 from kornia.geometry.transform import warp_perspective
 
 
+_warp_norm_cache = {}
+
+
 class AverageMeter(object):
     """Computes and stores the average and current value"""
 
@@ -27,7 +30,17 @@ class AverageMeter(object):
 def to_device(*tensors):
     if len(tensors) < 2:
         return tensors[0].to(cfg.system.device)
-    return (t.to(cfg.system.device) for t in tensors)
+    return tuple(t.to(cfg.system.device) for t in tensors)
+
+
+def _get_warp_norm_mats(device, dtype, sz):
+    key = (str(device), str(dtype), int(sz))
+    if key not in _warp_norm_cache:
+        s, t = sz / 2.0, 1.0
+        left = torch.tensor([[s, 0, t * s], [0, s, t * s], [0, 0, 1]], device=device, dtype=dtype)
+        right = torch.tensor([[1 / s, 0, -t], [0, 1 / s, -t], [0, 0, 1]], device=device, dtype=dtype)
+        _warp_norm_cache[key] = (left, right)
+    return _warp_norm_cache[key]
 
 
 def collate_fn(batch):
@@ -101,12 +114,9 @@ def order_points(pts):
 def warp(img, Minv_pred, device=None, sz=224):
     if device is None:
         device = "cuda" if torch.cuda.is_available() else "cpu"
-    s, t = sz / 2.0, 1.0
-    Minv_pred = (
-        torch.Tensor([[s, 0, t * s], [0, s, t * s], [0, 0, 1]]).to(device)
-        @ Minv_pred.to(device)
-        @ torch.Tensor([[1 / s, 0, -t], [0, 1 / s, -t], [0, 0, 1]]).to(device)
-    )
+    dtype = Minv_pred.dtype if torch.is_tensor(Minv_pred) else torch.float32
+    left, right = _get_warp_norm_mats(device, dtype, sz)
+    Minv_pred = left @ Minv_pred.to(device=device, dtype=dtype) @ right
     img_ = warp_perspective(img, Minv_pred, (sz, sz))
     return img_
 
@@ -124,14 +134,11 @@ def warp_points(points, Minv_pred, device=None, sz=224):
         points = points.unsqueeze(1)
 
     B, N, _ = points.shape
-    s, t = sz / 2.0, 1.0
+    dtype = Minv_pred.dtype if torch.is_tensor(Minv_pred) else points.dtype
+    left, right = _get_warp_norm_mats(device, dtype, sz)
 
     # 构建与 warp() 一致的最终变换矩阵
-    transform_matrix = (
-        torch.Tensor([[s, 0, t * s], [0, s, t * s], [0, 0, 1]]).to(device)
-        @ Minv_pred.to(device)
-        @ torch.Tensor([[1 / s, 0, -t], [0, 1 / s, -t], [0, 0, 1]]).to(device)
-    )  # [B, 3, 3]
+    transform_matrix = left @ Minv_pred.to(device=device, dtype=dtype) @ right  # [B, 3, 3]
 
     # 转换为齐次坐标 [B, N, 3]
     points_h = torch.cat([points, torch.ones(B, N, 1, device=device)], dim=-1)
