@@ -7,7 +7,6 @@ import gradio as gr
 from PIL import Image
 from skimage import morphology
 
-from gauge_read.utils.config import config as cfg
 from gauge_read.models.textnet import TextNet
 from gauge_read.utils.reader import MeterReader, TextDetector
 from gauge_read.utils.converter import StringLabelConverter
@@ -18,7 +17,8 @@ from gauge_read.inference import Detector
 
 
 class GaugeAppModel:
-    def __init__(self):
+    def __init__(self, cfg):
+        self.cfg = cfg
         self.device = cfg.system.device
         self.textnet = None
         self.stn = None
@@ -39,9 +39,9 @@ class GaugeAppModel:
         self.yolo_weights_path = None
 
     def load_models(self, textnet_path, stn_path=None, yolo_path=None):
-        textnet_path = textnet_path or cfg.predict.get("model_path", "")
-        stn_path = stn_path if stn_path is not None else cfg.data.get("stn_model_path", "")
-        yolo_path = yolo_path or cfg.predict.get("yolo_model_path", "")
+        textnet_path = textnet_path or self.cfg.predict.get("model_path", "")
+        stn_path = stn_path if stn_path is not None else self.cfg.data.get("stn_model_path", "")
+        yolo_path = yolo_path or self.cfg.predict.get("yolo_model_path", "")
 
         if not textnet_path or not os.path.exists(textnet_path):
             self.textnet = None
@@ -52,7 +52,7 @@ class GaugeAppModel:
 
         # Load TextNet
         print(f"Loading TextNet from {textnet_path}")
-        self.textnet = TextNet(is_training=False, backbone=cfg.model.net)
+        self.textnet = TextNet(is_training=False, backbone=self.cfg.model.net, cfg=self.cfg)
 
         # Robust loading context
         try:
@@ -91,8 +91,8 @@ class GaugeAppModel:
         # Load YOLO
         try:
             print(f"Loading YOLO Detector from {yolo_path if yolo_path else 'default'}...")
-            self.yolo_detector = Detector(weights=yolo_path if yolo_path else None)
-            self.yolo_weights_path = yolo_path if yolo_path else cfg.predict.get("yolo_model_path", "")
+            self.yolo_detector = Detector(cfg=self.cfg, weights=yolo_path if yolo_path else None)
+            self.yolo_weights_path = yolo_path if yolo_path else self.cfg.predict.get("yolo_model_path", "")
         except Exception as e:
             gr.Error(f"无法加载YOLO模型: {str(e)}")
             self.yolo_detector = None
@@ -155,12 +155,12 @@ class GaugeAppModel:
 
         # 构建用于界面展示和画图的 display_img，反向归一化 trans_img_np
         img_show = trans_img_np.copy()
-        img_show = ((img_show * np.array(cfg.model.stds) + np.array(cfg.model.means)) * 255).astype(np.uint8)
+        img_show = ((img_show * np.array(self.cfg.model.stds) + np.array(self.cfg.model.means)) * 255).astype(np.uint8)
         display_img = cv2.cvtColor(img_show, cv2.COLOR_BGR2RGB)
 
         trans_img = trans_img_np.transpose(2, 0, 1)
         trans_img = torch.from_numpy(trans_img).unsqueeze(0)
-        trans_img = to_device(trans_img)
+        trans_img = to_device(trans_img, device=self.device)
 
         try:
             output = self.detector.detect1(trans_img)

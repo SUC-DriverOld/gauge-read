@@ -9,14 +9,15 @@ from ultralytics import YOLO
 from gauge_read.models.textnet import TextNet
 from gauge_read.utils.stn_transform import STNTransformer
 from gauge_read.utils.augmentation import BaseTransform
-from gauge_read.utils.config import config as cfg, load_config, print_config
+from gauge_read.utils.config import AttrDict
 from gauge_read.utils.converter import StringLabelConverter
 from gauge_read.utils.tools import to_device
 from gauge_read.utils.reader import MeterReader, TextDetector
 
 
 class Detector(object):
-    def __init__(self, weights=None):
+    def __init__(self, cfg, weights=None):
+        self.cfg = cfg
         yolo_cfg = cfg.get("predict", {})
         self.img_size = int(yolo_cfg.get("yolo_imgsz", 640))
         self.threshold = float(yolo_cfg.get("yolo_conf", 0.6))
@@ -106,12 +107,7 @@ class Detector(object):
         return annotated, image_info, digital_list, meter_list
 
 
-def main(args):
-    if args.config:
-        load_config(args.config)
-
-    print_config(cfg)
-
+def main(args, cfg):
     stn_transformer = None
     if cfg.predict.get("use_stn", False):
         stn_model_path = cfg.data.get("stn_model_path", "")
@@ -123,7 +119,7 @@ def main(args):
     if not os.path.isdir(predict_dir):
         raise NotADirectoryError(f"Predict directory not found: {predict_dir}")
 
-    model = TextNet(is_training=False, backbone=cfg.model.net)
+    model = TextNet(is_training=False, backbone=cfg.model.net, cfg=cfg)
     model_path = cfg.predict.model_path
     if not os.path.exists(model_path):
         raise FileNotFoundError(
@@ -134,7 +130,7 @@ def main(args):
     model = model.to(cfg.system.device)
     converter = StringLabelConverter()
 
-    det = Detector()
+    det = Detector(cfg=cfg)
     detector = TextDetector(model)
     meter = MeterReader()
     transform = BaseTransform(size=cfg.data.test_size, mean=cfg.model.means, std=cfg.model.stds)
@@ -172,7 +168,7 @@ def main(args):
             norm_img, _ = transform(meter_img)
             norm_img = norm_img.transpose(2, 0, 1)
             norm_img = torch.from_numpy(norm_img).unsqueeze(0)
-            norm_img = to_device(norm_img)
+            norm_img = to_device(norm_img, device=cfg.system.device)
             try:
                 output = detector.detect1(norm_img)
             except Exception as e:
@@ -231,4 +227,8 @@ if __name__ == "__main__":
         help="Directory containing images to predict. Overrides config/default path.",
     )
     args = parser.parse_args()
-    main(args)
+
+    cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
+    cfg.print_config()
+
+    main(args, cfg)

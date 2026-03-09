@@ -17,11 +17,12 @@ if repo_root not in sys.path:
     sys.path.append(repo_root)
 
 from gauge_read.webui.app_logic import GaugeAppModel
-from gauge_read.utils.config import config as cfg, load_config
+from gauge_read.utils.config import AttrDict
 
 app = FastAPI(title="Gauge Reader API")
 _infer_lock = threading.Lock()
 _app_logic: Optional[GaugeAppModel] = None
+_cfg: Optional[AttrDict] = None
 
 
 def parse_args():
@@ -35,19 +36,27 @@ def parse_args():
     return parser.parse_args()
 
 
-def _resolve_model_paths(yolo_path=None, stn_path=None, textnet_path=None):
+def _resolve_model_paths(cfg, yolo_path=None, stn_path=None, textnet_path=None):
     yolo = yolo_path or cfg.predict.get("yolo_model_path", "pretrain/best.pt")
     stn = stn_path if stn_path is not None else cfg.data.get("stn_model_path", "")
     textnet = textnet_path or cfg.predict.get("model_path", "")
     return yolo, stn, textnet
 
 
+def _get_cfg():
+    global _cfg
+    if _cfg is None:
+        _cfg = AttrDict(AttrDict.DEFAULT_CONFIG_PATH)
+    return _cfg
+
+
 def init_app_logic(yolo_path=None, stn_path=None, textnet_path=None):
     global _app_logic
-    yolo, stn, textnet = _resolve_model_paths(yolo_path, stn_path, textnet_path)
+    cfg = _get_cfg()
+    yolo, stn, textnet = _resolve_model_paths(cfg, yolo_path, stn_path, textnet_path)
 
     print("Initializing Gauge Model...")
-    _app_logic = GaugeAppModel()
+    _app_logic = GaugeAppModel(cfg)
     _app_logic.load_models(textnet_path=textnet, stn_path=stn, yolo_path=yolo)
 
 
@@ -127,7 +136,6 @@ def predict(req: GaugeRequest):
 
 if __name__ == "__main__":
     args = parse_args()
-    if args.config:
-        load_config(args.config)
+    _cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
     init_app_logic(yolo_path=args.yolo, stn_path=args.stn, textnet_path=args.textnet)
     uvicorn.run(app, host=args.host, port=args.port)

@@ -12,7 +12,7 @@ if repo_root not in sys.path:
     sys.path.append(repo_root)
 
 from gauge_read.webui.app_logic import GaugeAppModel
-from gauge_read.utils.config import config as cfg, load_config
+from gauge_read.utils.config import AttrDict
 
 
 def main():
@@ -41,8 +41,7 @@ def main():
 
     args = parser.parse_args()
 
-    if args.config:
-        load_config(args.config)
+    cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
 
     yolo_path = args.yolo or cfg.predict.get("yolo_model_path", "pretrain/best.pt")
     stn_path = args.stn if args.stn is not None else cfg.data.get("stn_model_path", "")
@@ -64,7 +63,7 @@ def main():
     # Usually config.py uses relative paths or is loaded once.
 
     try:
-        app_logic = GaugeAppModel()
+        app_logic = GaugeAppModel(cfg)
         app_logic.load_models(textnet_path=textnet_path, stn_path=stn_path, yolo_path=yolo_path)
     except Exception as e:
         print(json.dumps({"status": "error", "message": f"Model initialization failed: {str(e)}"}))

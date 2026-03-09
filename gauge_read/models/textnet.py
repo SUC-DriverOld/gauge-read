@@ -8,8 +8,7 @@ from gauge_read.models.convnext import ConvNeXtTiny
 from gauge_read.models.crnn import CRNN
 from gauge_read.utils.roi import batch_roi_transform
 from gauge_read.utils.converter import keys
-from gauge_read.utils.tools import order_points, to_device
-from gauge_read.utils.config import config as cfg
+from gauge_read.utils.tools import order_points
 
 
 class TorchBlackHatModule(nn.Module):
@@ -108,10 +107,11 @@ class FPN(nn.Module):
 
 
 class TextNet(nn.Module):
-    def __init__(self, backbone="convnext_tiny", is_training=True):
+    def __init__(self, backbone="convnext_tiny", is_training=True, cfg=None):
         super().__init__()
 
-        self.use_multimodal = cfg.model.get("use_multimodal", False)
+        model_cfg = cfg.model if cfg is not None and "model" in cfg else {}
+        self.use_multimodal = model_cfg.get("use_multimodal", False)
         print(f"TextNet Multimodal Status: {self.use_multimodal}")
 
         self.is_training = is_training
@@ -155,7 +155,7 @@ class TextNet(nn.Module):
         # print("preds",preds.shape)
 
         preds_size = torch.LongTensor([preds.size(0)] * int(preds.size(1)))
-        preds_size = to_device(preds_size)
+        preds_size = preds_size.to(x.device)
         # print("predsize", preds_size)
 
         return predict_out, (preds, preds_size)

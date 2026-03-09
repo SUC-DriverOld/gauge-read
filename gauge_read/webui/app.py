@@ -1,4 +1,5 @@
 import gradio as gr
+import argparse
 import os
 import sys
 
@@ -9,8 +10,17 @@ if repo_root not in sys.path:
     sys.path.append(repo_root)
 
 from gauge_read.webui.app_logic import GaugeAppModel
+from gauge_read.utils.config import AttrDict
 
-app_logic = GaugeAppModel()
+
+def init_runtime(config_path=None):
+    global cfg, app_logic
+    resolved = config_path or os.environ.get("GAUGE_CONFIG", AttrDict.DEFAULT_CONFIG_PATH)
+    cfg = AttrDict(resolved)
+    app_logic = GaugeAppModel(cfg)
+
+
+init_runtime()
 
 
 def get_model_files(directory):
@@ -132,4 +142,13 @@ with gr.Blocks(title="模拟仪表读数系统") as demo:
     end_val_input.change(update_end_val_ui, inputs=[end_val_input], outputs=[result_image, result_val])
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description="Gauge Read WebUI")
+    parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
+    args = parser.parse_args()
+
+    if args.config:
+        init_runtime(args.config)
+
+    cfg.print_config()
+
     demo.queue().launch(inbrowser=True)

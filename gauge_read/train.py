@@ -21,7 +21,7 @@ from gauge_read.datasets import MeterDataset
 from gauge_read.models.loss import TextLoss
 from gauge_read.models.textnet import TextNet
 from gauge_read.utils.augmentation import Augmentation
-from gauge_read.utils.config import config as cfg, print_config, load_config, update_config
+from gauge_read.utils.config import AttrDict
 from gauge_read.utils.tools import AverageMeter, to_device, collate_fn
 from gauge_read.utils.converter import StringLabelConverter
 
@@ -36,7 +36,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def save_model(model, epoch, lr, optimzer):
+def save_model(model, epoch, lr, optimzer, cfg):
     save_dir = os.path.join(cfg.experiment.save_dir, cfg.experiment.exp_name)
     os.makedirs(save_dir, exist_ok=True)
 
@@ -51,7 +51,7 @@ def save_model(model, epoch, lr, optimzer):
     torch.save(state_dict, save_path)
 
 
-def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer):
+def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, cfg):
     global train_step
 
     losses = AverageMeter()
@@ -67,13 +67,15 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer):
 
         train_step += 1
 
-        img, pointer_mask, dail_mask, text_mask, train_mask = to_device(img, pointer_mask, dail_mask, text_mask, train_mask)
+        img, pointer_mask, dail_mask, text_mask, train_mask = to_device(
+            img, pointer_mask, dail_mask, text_mask, train_mask, device=cfg.system.device
+        )
 
         output, pred_recog = model(img, bboxs, mapping)  # 4*12*640*640
 
         labels, label_lengths = converter.encode(transcripts.tolist())
-        labels = to_device(labels)
-        label_lengths = to_device(label_lengths)
+        labels = to_device(labels, device=cfg.system.device)
+        label_lengths = to_device(label_lengths, device=cfg.system.device)
         recog = (labels, label_lengths)
 
         loss_pointer, loss_dail, loss_text, loss_rec = criterion(
@@ -113,19 +115,19 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer):
         )
 
     if epoch % cfg.training.save_freq == 0:
-        save_model(model, epoch, scheduler.get_last_lr()[0], optimizer)
+        save_model(model, epoch, scheduler.get_last_lr()[0], optimizer, cfg)
 
     print("Training Loss: {}".format(losses.avg))
 
 
-def main():
+def main(cfg):
     global lr
     means = tuple(cfg.model.means)
     stds = tuple(cfg.model.stds)
 
     transform = Augmentation(size=640, mean=means, std=stds)
 
-    trainset = MeterDataset(transform=transform)
+    trainset = MeterDataset(transform=transform, cfg=cfg)
     train_loader = data.DataLoader(
         trainset,
         batch_size=cfg.training.batch_size,
@@ -136,7 +138,7 @@ def main():
     )
 
     # Model
-    model = TextNet(backbone=cfg.model.net, is_training=True)
+    model = TextNet(backbone=cfg.model.net, is_training=True, cfg=cfg)
 
     model = model.to(cfg.system.device)
 
@@ -178,7 +180,7 @@ def main():
 
     print("Start training")
     for epoch in range(cfg.training.start_epoch, cfg.training.start_epoch + cfg.training.max_epoch + 1):
-        train(model, train_loader, criterion, scheduler, optimizer, epoch, writer)  # train
+        train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, cfg)  # train
         scheduler.step()
     print("End.")
 
@@ -190,9 +192,7 @@ def main():
 
 if __name__ == "__main__":
     args = parse_args()
-    if args.config:
-        load_config(args.config)
-    update_config(cfg, args)
+    cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
 
     seed = int(cfg.training.get("seed", 114514))
     random.seed(seed)
@@ -201,5 +201,5 @@ if __name__ == "__main__":
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
 
-    print_config(cfg)
-    main()
+    cfg.print_config()
+    main(cfg)

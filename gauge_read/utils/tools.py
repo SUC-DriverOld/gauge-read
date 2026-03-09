@@ -1,7 +1,6 @@
 import numpy as np
 import cv2
 import torch
-from gauge_read.utils.config import config as cfg
 from kornia.geometry.transform import warp_perspective
 
 
@@ -27,10 +26,10 @@ class AverageMeter(object):
         self.avg = self.sum / self.count
 
 
-def to_device(*tensors):
+def to_device(*tensors, device):
     if len(tensors) < 2:
-        return tensors[0].to(cfg.system.device)
-    return tuple(t.to(cfg.system.device) for t in tensors)
+        return tensors[0].to(device)
+    return tuple(t.to(device) for t in tensors)
 
 
 def _get_warp_norm_mats(device, dtype, sz):

@@ -6,7 +6,6 @@ import copy
 import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from PIL import Image
-from gauge_read.utils.config import config as cfg
 from gauge_read.utils.stn_transform import STNTransformer
 from gauge_read.datasets.synth_gauge import gen_gauge
 
@@ -91,8 +90,9 @@ class TextDataset(Dataset):
 
 
 class MeterDataset(TextDataset):
-    def __init__(self, root="./datas", mode="train", mode1="train1", is_training=True, transform=None):
+    def __init__(self, root="./datas", mode="train", mode1="train1", is_training=True, transform=None, cfg=None):
         super().__init__(transform, is_training)
+        self.cfg = cfg
         self.dataset = []
         self.name = []
         image_path = f"{root}/images/"
@@ -106,9 +106,9 @@ class MeterDataset(TextDataset):
 
         self.annotation_cache = {}
 
-        if cfg.data.get("stn_correction", False):
+        if self.cfg is not None and self.cfg.data.get("stn_correction", False):
             # Use CPU for dataset workers to avoid multiprocessing issues with CUDA
-            self.stn_transformer = STNTransformer(cfg.data.get("stn_model_path", ""))
+            self.stn_transformer = STNTransformer(self.cfg.data.get("stn_model_path", ""))
         else:
             self.stn_transformer = None
 
