@@ -46,9 +46,9 @@ class MeterReader(object):
             float: The calculated reading value.
         """
         if not std_points or len(std_points) < 2:
-            return start_val
+            return float(start_val), 0.0
         if not pointer_line or len(pointer_line) < 2:
-            return start_val
+            return float(start_val), 0.0
 
         p1 = np.array(std_points[0])
         p2 = np.array(std_points[1])
@@ -84,7 +84,7 @@ class MeterReader(object):
         ptr_angle = diff_angle(ang_ptr, ang_start)
 
         if total_angle < 1e-3:
-            return start_val
+            return float(start_val), 0.0
 
         ratio = ptr_angle / total_angle
         val_span = end_val - start_val
@@ -114,21 +114,23 @@ class MeterReader(object):
         # cv2.imshow("dail_edges", dail_edges)
         # cv2.waitKey(0)
 
-        # Draw masks for visualization (Red for pointer, Green for dial)
-        # Create colored overlays
-        colored_masks = np.zeros_like(ori_img)
-        colored_masks[pointer_mask > 0] = [0, 0, 255]  # Red for pointer
-        colored_masks[dail_mask > 0] = [0, 255, 0]  # Green for dial
-        colored_masks[word_mask > 0] = [255, 0, 0]  # Blue for word
-
-        # Blend overlay with original image
-        ori_img = cv2.addWeighted(ori_img, 1.0, colored_masks, 0.5, 0)
+        if self.debug:
+            # Draw masks for visualization (Red for pointer, Green for dial)
+            colored_masks = np.zeros_like(ori_img)
+            colored_masks[pointer_mask > 0] = [0, 0, 255]  # Red for pointer
+            colored_masks[dail_mask > 0] = [0, 255, 0]  # Green for dial
+            colored_masks[word_mask > 0] = [255, 0, 0]  # Blue for word
+            ori_img = cv2.addWeighted(ori_img, 1.0, colored_masks, 0.5, 0)
 
         pointer_lines = cv2.HoughLinesP(pointer_edges, 1, np.pi / 180, 10, np.array([]), minLineLength=10, maxLineGap=400)
         if pointer_lines is None or len(pointer_lines) == 0:
             return "can not detect pointer"
 
-        x1, y1, x2, y2 = pointer_lines[0][0]
+        # Pick the longest candidate for better robustness than taking the first line.
+        lines = pointer_lines[:, 0, :]
+        lengths = (lines[:, 2] - lines[:, 0]) ** 2 + (lines[:, 3] - lines[:, 1]) ** 2
+        best_idx = int(np.argmax(lengths))
+        x1, y1, x2, y2 = lines[best_idx]
         coin1 = (x1, y1)
         coin2 = (x2, y2)
         if self.debug:
@@ -141,7 +143,8 @@ class MeterReader(object):
         if predicted_center is not None:
             center = (int(predicted_center[0]), int(predicted_center[1]))
             # Draw predicted center
-            cv2.circle(ori_img, center, 5, (0, 0, 255), -1)
+            if self.debug:
+                cv2.circle(ori_img, center, 5, (0, 0, 255), -1)
             if self.debug:
                 print(f"Using predicted center from STN: {center}")
         else:
@@ -154,7 +157,8 @@ class MeterReader(object):
                     if -w < geo_center[0] < 2 * w and -h < geo_center[1] < 2 * h:
                         center = geo_center
                         # Draw calculated center
-                        cv2.circle(ori_img, center, 5, (0, 255, 255), -1)
+                        if self.debug:
+                            cv2.circle(ori_img, center, 5, (0, 255, 255), -1)
 
         dis1 = (coin1[0] - center[0]) ** 2 + (coin1[1] - center[1]) ** 2
         dis2 = (coin2[0] - center[0]) ** 2 + (coin2[1] - center[1]) ** 2
@@ -171,8 +175,9 @@ class MeterReader(object):
         # calculate angle
         a1 = std_point[0]
         a2 = std_point[1]
-        cv2.circle(ori_img, a1, 2, (255, 0, 0), 2)
-        cv2.circle(ori_img, a2, 2, (255, 0, 0), 2)
+        if self.debug:
+            cv2.circle(ori_img, a1, 2, (255, 0, 0), 2)
+            cv2.circle(ori_img, a2, 2, (255, 0, 0), 2)
         one = [[pointer_line[0][0], pointer_line[0][1]], [a1[0], a1[1]]]
         two = [[pointer_line[0][0], pointer_line[0][1]], [a2[0], a2[1]]]
         three = [[pointer_line[0][0], pointer_line[0][1]], [pointer_line[1][0], pointer_line[1][1]]]
@@ -219,8 +224,8 @@ class MeterReader(object):
         else:
             # Even if number is missing, show ratio
             font = cv2.FONT_HERSHEY_SIMPLEX
-            ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
             if self.debug:
+                ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
                 cv2.imshow("result", ori_img)
                 cv2.waitKey(0)
             return f"Ratio: {ratio}"
@@ -237,11 +242,10 @@ class MeterReader(object):
         else:
             value = round(value, 3)
 
-        font = cv2.FONT_HERSHEY_SIMPLEX
-        ori_img = cv2.putText(ori_img, str(value), (30, 30), font, 1.2, (255, 0, 255), 2)
-        ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
-
         if self.debug:
+            font = cv2.FONT_HERSHEY_SIMPLEX
+            ori_img = cv2.putText(ori_img, str(value), (30, 30), font, 1.2, (255, 0, 255), 2)
+            ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
             cv2.imshow("result", ori_img)
             cv2.waitKey(0)
 
@@ -297,7 +301,10 @@ class MeterReader(object):
         line_point1, line_point2 = np.array(line[0:2]), np.array(line[2:])
         vec1 = line_point1 - point
         vec2 = line_point2 - point
-        distance = np.abs(np.cross(vec1, vec2)) / np.linalg.norm(line_point1 - line_point2)
+        denom = np.linalg.norm(line_point1 - line_point2)
+        if denom < 1e-8:
+            return float("inf")
+        distance = np.abs(np.cross(vec1, vec2)) / denom
         return distance
 
     def judge(self, p1, p2, p3):
@@ -312,7 +319,10 @@ class MeterReader(object):
     def angle(self, v1, v2):
         lx = np.sqrt(v1.dot(v1))
         ly = np.sqrt(v2.dot(v2))
+        if lx < 1e-8 or ly < 1e-8:
+            return 0.0
         cos_angle = v1.dot(v2) / (lx * ly)
+        cos_angle = np.clip(cos_angle, -1.0, 1.0)
 
         angle = np.arccos(cos_angle)
         angle2 = angle * 360 / 2 / np.pi
