@@ -139,7 +139,7 @@ class TextNet(nn.Module):
 
     @staticmethod
     def _mask_to_contours_and_centers(mask):
-        edges = (mask.astype(np.uint8) * 255)
+        edges = mask.astype(np.uint8) * 255
         contours, _ = cv2.findContours(edges, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         centers = []
         for contour in contours:

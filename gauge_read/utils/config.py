@@ -9,9 +9,7 @@ class AttrDict(dict):
     the real dictionary.
     """
 
-    DEFAULT_CONFIG_PATH = os.path.join(
-        os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs", "config.yaml"
-    )
+    DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs", "config.yaml")
 
     def __init__(self, *args, **kwargs):
         dict.__init__(self)

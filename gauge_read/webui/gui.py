@@ -35,6 +35,7 @@ def start_gradio(server_name, server_port, config_path=None):
         os.environ["GAUGE_CONFIG"] = config_path
 
     from gauge_read.webui import app
+
     app.cfg.print_config()
 
     global gradio_app
@@ -65,12 +66,7 @@ def main():
             text_select=False,
             confirm_close=True,
         )
-        webview.start(
-            func=start_gradio,
-            args=(server_name, server_port, args.config),
-            debug=False,
-            http_server=False,
-        )
+        webview.start(func=start_gradio, args=(server_name, server_port, args.config), debug=False, http_server=False)
         if gradio_app:
             gradio_app.demo.close()
     except Exception as e:

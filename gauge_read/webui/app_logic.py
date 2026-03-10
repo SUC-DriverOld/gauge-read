@@ -98,7 +98,9 @@ class GaugeAppModel:
             self.yolo_detector = None
             self.yolo_weights_path = None
 
-        gr.Info(f"模型加载完成\n读数模型：{textnet_path}\nSTN模型：{stn_path if stn_path else 'disabled'}\nYOLO模型：{self.yolo_weights_path if self.yolo_detector is not None else 'failed'}")
+        gr.Info(
+            f"模型加载完成\n读数模型：{textnet_path}\nSTN模型：{stn_path if stn_path else 'disabled'}\nYOLO模型：{self.yolo_weights_path if self.yolo_detector is not None else 'failed'}"
+        )
 
     def process_image(self, input_image, use_stn=True, use_yolo=False):
         if self.textnet is None:
@@ -232,7 +234,6 @@ class GaugeAppModel:
         return self.draw_visualization(), val, self.current_start_value, self.current_end_value
 
     def _get_pointer_line(self, mask, shape, center=None):
-
         pointer_skeleton = morphology.skeletonize(mask > 0)
         pointer_edges = pointer_skeleton * 255
         pointer_edges = pointer_edges.astype(np.uint8)

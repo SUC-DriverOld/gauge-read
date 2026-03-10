@@ -47,14 +47,7 @@ def batch_roi_transform(feature_map, boxes, mapping, size=(32, 180)):
     bsz, c, h, w = feats.shape
 
     # src points: p1(x1,y1), p2(x2,y2), p4(x4,y4)
-    src = torch.stack(
-        [
-            boxes_t[:, [0, 1]],
-            boxes_t[:, [2, 3]],
-            boxes_t[:, [6, 7]],
-        ],
-        dim=1,
-    )
+    src = torch.stack([boxes_t[:, [0, 1]], boxes_t[:, [2, 3]], boxes_t[:, [6, 7]]], dim=1)
     dst = torch.tensor([[0.0, 0.0], [float(resize_w), 0.0], [0.0, float(resize_h)]], device=device, dtype=dtype)
     dst = dst.unsqueeze(0).repeat(bsz, 1, 1)
 

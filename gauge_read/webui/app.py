@@ -39,6 +39,10 @@ meter_dir = os.path.join(repo_root, "pretrain", "meter")
 stn_dir = os.path.join(repo_root, "pretrain", "stn")
 yolo_dir = os.path.join(repo_root, "pretrain", "yolo")
 
+os.makedirs(meter_dir, exist_ok=True)
+os.makedirs(stn_dir, exist_ok=True)
+os.makedirs(yolo_dir, exist_ok=True)
+
 model_options = get_model_files(meter_dir)
 stn_options = get_model_files(stn_dir)
 yolo_options = get_model_files(yolo_dir)
@@ -96,9 +100,7 @@ with gr.Blocks(title="模拟仪表读数系统") as demo:
             model_dropdown = gr.Dropdown(
                 choices=model_options, label="仪表读数模型", value=model_options[0] if model_options else None
             )
-            stn_dropdown = gr.Dropdown(
-                choices=stn_options, label="STN矫正模型", value=stn_options[0] if stn_options else None
-            )
+            stn_dropdown = gr.Dropdown(choices=stn_options, label="STN矫正模型", value=stn_options[0] if stn_options else None)
             yolo_dropdown = gr.Dropdown(
                 choices=yolo_options, label="YOLO检测模型", value=yolo_options[0] if yolo_options else None
             )

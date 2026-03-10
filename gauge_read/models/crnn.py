@@ -38,12 +38,7 @@ class CRNN(nn.Module):
             (512, 2, 1, 0, True),
         ]
 
-        pool_specs = {
-            0: (2, 2, 0),
-            1: (2, 2, 0),
-            3: ((2, 2), (2, 1), (0, 1)),
-            5: ((2, 2), (2, 1), (0, 1)),
-        }
+        pool_specs = {0: (2, 2, 0), 1: (2, 2, 0), 3: ((2, 2), (2, 1), (0, 1)), 5: ((2, 2), (2, 1), (0, 1))}
 
         for i, (n_out, k, s, p, use_bn) in enumerate(conv_specs):
             n_in = nc if i == 0 else conv_specs[i - 1][0]

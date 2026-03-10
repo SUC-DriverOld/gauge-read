@@ -213,11 +213,7 @@ def main(args, cfg):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Gauge inference")
     parser.add_argument(
-        "-c",
-        "--config",
-        type=str,
-        default=None,
-        help="Path to YAML config file. If omitted, default config is used.",
+        "-c", "--config", type=str, default=None, help="Path to YAML config file. If omitted, default config is used."
     )
     parser.add_argument(
         "-d",

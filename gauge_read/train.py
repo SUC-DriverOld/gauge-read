@@ -42,10 +42,7 @@ def save_model(model, epoch, lr, optimzer, cfg):
 
     save_path = os.path.join(save_dir, "textgraph_{}_{}.pth".format(model.backbone_name, epoch))
     print("Saving to {}.".format(save_path))
-    state_dict = {
-        "epoch": epoch,
-        "model": model.state_dict(),
-    }
+    state_dict = {"epoch": epoch, "model": model.state_dict()}
     torch.save(state_dict, save_path)
 
 
