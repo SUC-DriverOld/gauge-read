@@ -172,7 +172,7 @@ class TextNet(nn.Module):
 
         return predict_out, (preds, preds_size)
 
-    def forward_test(self, x_input):
+    def forward_inference(self, x_input):
         x, aux = self._prepare_backbone_input(x_input)
 
         up1, up2, up3, up4, up5 = self.fpn(x)

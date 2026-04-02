@@ -193,7 +193,7 @@ class GaugeAppModel:
 
         # 2. Get Std Points if not valid from model
         # The model tries to find them. If `std_points` from model is valid (len>=2), use it.
-        # Note: `std_points` in `forward_test` output might be [std_point[0], ref_point[0]] or similar
+        # Note: `std_points` in `forward_inference` output might be [std_point[0], ref_point[0]] or similar
         print(f"Model returned std_points: {std_points}")
 
         final_std = []

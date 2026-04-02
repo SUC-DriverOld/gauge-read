@@ -11,7 +11,7 @@ class TextDetector(object):
 
     def detect1(self, image):
         with torch.no_grad():
-            pointer_pred, dail_pred, text_pred, pred_recog, std_points, aux_map = self.model.forward_test(image)
+            pointer_pred, dail_pred, text_pred, pred_recog, std_points, aux_map = self.model.forward_inference(image)
 
         image = image[0].data.cpu().numpy()
 
