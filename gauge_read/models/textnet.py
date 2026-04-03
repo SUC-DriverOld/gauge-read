@@ -118,7 +118,9 @@ class TextNet(nn.Module):
         self.predict = nn.Sequential(nn.Conv2d(32, self.out_channel, kernel_size=1, stride=1, padding=0))
 
         num_class = len(keys) + 1
-        self.recognizer = Recognizer(num_class, nc=4 if self.use_multimodal else 3)
+        # Single-modal ROI crops are converted to grayscale in batch_roi_transform,
+        # while multimodal crops keep all 4 channels.
+        self.recognizer = Recognizer(num_class, nc=4 if self.use_multimodal else 1)
 
         if self.use_multimodal:
             self.blackhat_gen = TorchBlackHatModule()
