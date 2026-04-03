@@ -14,6 +14,7 @@ from gauge_read.utils.augmentation import BaseTransform
 from gauge_read.utils.tools import to_device
 from gauge_read.utils.stn_transform import STNTransformer
 from gauge_read.inference import Detector
+from gauge_read.webui.batch_infer import BatchInferenceService
 
 
 class GaugeAppModel:
@@ -37,6 +38,10 @@ class GaugeAppModel:
         self.current_ratio = 0.0
         self.scale_range = 1.6  # Default, maybe user should input this? Or inferred.
         self.yolo_weights_path = None
+        self.batch_inference = BatchInferenceService(self)
+
+    def process_batch_directory(self, input_dir, use_stn=True, use_yolo=False, progress=None):
+        return self.batch_inference.process_directory(input_dir, use_stn=use_stn, use_yolo=use_yolo, progress=progress)
 
     def load_models(self, textnet_path, stn_path=None, yolo_path=None):
         textnet_path = textnet_path or self.cfg.predict.get("model_path", "")

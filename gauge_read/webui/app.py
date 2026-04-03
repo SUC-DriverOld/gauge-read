@@ -13,6 +13,19 @@ from gauge_read.webui.app_logic import GaugeAppModel
 from gauge_read.utils.config import AttrDict
 
 
+BATCH_RESULT_PLACEHOLDER = (
+    "<div style='padding:12px;text-align:center;color:var(--body-text-color-subdued, var(--color-text-secondary, #57606a));'>"
+    "点击“开始批量推理”按钮后开始批量处理"
+    "</div>"
+)
+INSTRUCTIONS = """
+    1. **加载模型**：在下拉菜单中选择预训练的仪表读数模型、STN矫正模型和YOLO检测模型，然后点击“加载模型”按钮。
+    2. **单图推理**：上传一张仪表图片，选择是否启用STN矫正和YOLO检测，然后点击“开始推理”按钮。处理后的图片会显示在右侧，并且会自动识别起始值和结束值。
+    3. **编辑结果**：如果识别结果不准确，可以选择修正模式（起始点、结束点、指针尖端、指针根部、圆心点），然后点击图片上的对应位置进行修正。也可以直接编辑起始值和结束值文本框来调整读数。
+    4. **批量推理**：输入包含多张仪表图片的文件夹路径，选择是否启用STN矫正和YOLO检测，然后点击“开始批量推理”按钮。处理结果会以表格格式显示，并提供ZIP文件下载处理后的图片，以及CSV文件下载读数结果。
+"""
+
+
 def init_runtime(config_path=None):
     global cfg, app_logic
     resolved = config_path or os.environ.get("GAUGE_CONFIG", AttrDict.DEFAULT_CONFIG_PATH)
@@ -50,7 +63,8 @@ yolo_options = get_model_files(yolo_dir)
 
 def load_models_ui(model_path, stn_path, yolo_path):
     app_logic.load_models(model_path, stn_path, yolo_path)
-    return model_path, stn_path, yolo_path
+    model_selection = gr.update(open=False)
+    return model_path, stn_path, yolo_path, model_selection
 
 
 def process_ui(image, use_stn, use_yolo):
@@ -60,21 +74,19 @@ def process_ui(image, use_stn, use_yolo):
     return vis_img, val, start_val, end_val
 
 
+def process_batch_ui(input_dir, use_stn, use_yolo, progress=None):
+    if progress is None:
+        progress = gr.Progress(track_tqdm=True)
+    result_html, zip_path, csv_path = app_logic.process_batch_directory(input_dir, use_stn, use_yolo, progress=progress)
+    return result_html, zip_path, csv_path
+
+
 def update_point_ui(evt: gr.SelectData, mode):
     # evt.index is [x, y]
     x, y = evt.index[0], evt.index[1]
 
-    point_type = "none"
-    if mode == "起始点":
-        point_type = "start"
-    elif mode == "结束点":
-        point_type = "end"
-    elif mode == "指针尖端":
-        point_type = "pointer_tip"
-    elif mode == "指针根部":
-        point_type = "pointer_root"
-    elif mode == "圆心点":
-        point_type = "center"
+    type_map = {"起始点": "start", "结束点": "end", "指针尖端": "pointer_tip", "指针根部": "pointer_root", "圆心点": "center"}
+    point_type = type_map.get(mode, "none")
 
     if point_type != "none":
         new_img, new_val = app_logic.update_point(point_type, x, y)
@@ -95,16 +107,21 @@ def update_end_val_ui(text):
 
 with gr.Blocks(title="模拟仪表读数系统") as demo:
     gr.HTML("""<h1 style="text-align: center;">模拟仪表读数系统</h1>""")
-    with gr.Group():
-        with gr.Row():
-            model_dropdown = gr.Dropdown(
-                choices=model_options, label="仪表读数模型", value=model_options[0] if model_options else None
-            )
-            stn_dropdown = gr.Dropdown(choices=stn_options, label="STN矫正模型", value=stn_options[0] if stn_options else None)
-            yolo_dropdown = gr.Dropdown(
-                choices=yolo_options, label="YOLO检测模型", value=yolo_options[0] if yolo_options else None
-            )
-        load_btn = gr.Button("加载模型", variant="primary")
+    with gr.Accordion("使用说明 (点击展开)", open=False):
+        gr.Markdown(INSTRUCTIONS)
+    with gr.Accordion("模型选择", open=True) as model_selection:
+        with gr.Group():
+            with gr.Row():
+                model_dropdown = gr.Dropdown(
+                    choices=model_options, label="仪表读数模型", value=model_options[0] if model_options else None
+                )
+                stn_dropdown = gr.Dropdown(
+                    choices=stn_options, label="STN矫正模型", value=stn_options[0] if stn_options else None
+                )
+                yolo_dropdown = gr.Dropdown(
+                    choices=yolo_options, label="YOLO检测模型", value=yolo_options[0] if yolo_options else None
+                )
+            load_btn = gr.Button("加载模型", variant="primary")
     with gr.Tabs():
         with gr.TabItem("单图推理"):
             with gr.Group():
@@ -127,17 +144,38 @@ with gr.Blocks(title="模拟仪表读数系统") as demo:
                             end_val_input = gr.Textbox(label="结束值 (可手动编辑)", value="0", interactive=True)
                             result_val = gr.Textbox(label="读数结果", lines=1, scale=2)
         with gr.TabItem("批量推理"):
-            gr.Markdown("正在开发中...")
+            with gr.Group():
+                with gr.Row():
+                    with gr.Column(scale=4):
+                        batch_input_dir = gr.Textbox(
+                            label="图片文件夹",
+                            placeholder="请输入待批量推理的图片文件夹路径",
+                            value=cfg.predict.get("data_dir", ""),
+                        )
+                    with gr.Column(scale=1):
+                        batch_use_stn_chk = gr.Checkbox(label="启用STN矫正", value=True)
+                        batch_use_yolo_chk = gr.Checkbox(label="启用YOLO检测", value=True)
+                batch_run_btn = gr.Button("开始批量推理", variant="primary")
+            with gr.Group():
+                with gr.Row():
+                    batch_zip_file = gr.File(label="下载结果图像 ZIP", interactive=False)
+                    batch_csv_file = gr.File(label="下载结果 CSV", interactive=False)
+                batch_result_html = gr.HTML(label="批量推理结果", value=BATCH_RESULT_PLACEHOLDER)
 
     load_btn.click(
         load_models_ui,
         inputs=[model_dropdown, stn_dropdown, yolo_dropdown],
-        outputs=[model_dropdown, stn_dropdown, yolo_dropdown],
+        outputs=[model_dropdown, stn_dropdown, yolo_dropdown, model_selection],
     )
     run_btn.click(
         process_ui,
         inputs=[input_image, use_stn_chk, use_yolo_chk],
         outputs=[result_image, result_val, start_val_input, end_val_input],
+    )
+    batch_run_btn.click(
+        process_batch_ui,
+        inputs=[batch_input_dir, batch_use_stn_chk, batch_use_yolo_chk],
+        outputs=[batch_result_html, batch_zip_file, batch_csv_file],
     )
     result_image.select(update_point_ui, inputs=[edit_mode], outputs=[result_image, result_val])
     start_val_input.change(update_start_val_ui, inputs=[start_val_input], outputs=[result_image, result_val])
