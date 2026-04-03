@@ -14,7 +14,7 @@ class EvalAnnotationApp:
     def __init__(self, root, image_dir=None):
         self.root = root
         self.root.title("Label Tool")
-        self.root.geometry("900x600")
+        self.root.geometry("1000x600")
 
         self.image_dir = Path(image_dir).resolve()
         self.image_files = self._load_image_files()
@@ -23,6 +23,7 @@ class EvalAnnotationApp:
 
         self.start_var = tk.StringVar(value="0")
         self.end_var = tk.StringVar(value="")
+        self.full_var = tk.StringVar(value="")
         self.value_var = tk.StringVar(value="")
         self.status_var = tk.StringVar(value="准备就绪")
         self.input_widgets = []
@@ -98,18 +99,24 @@ class EvalAnnotationApp:
         )
         self.start_entry.grid(row=0, column=1, sticky="w", padx=(0, 20))
 
-        ttk.Label(form_content, text="终止读数").grid(row=0, column=2, sticky="w", padx=(0, 8))
+        ttk.Label(form_content, text="第一刻度读数").grid(row=0, column=2, sticky="w", padx=(0, 8))
         self.end_entry = ttk.Entry(
             form_content, textvariable=self.end_var, width=16, validate="key", validatecommand=self.entry_validate_command
         )
         self.end_entry.grid(row=0, column=3, sticky="w", padx=(0, 20))
 
-        ttk.Label(form_content, text="当前读数").grid(row=0, column=4, sticky="w", padx=(0, 8))
+        ttk.Label(form_content, text="终止读数").grid(row=0, column=4, sticky="w", padx=(0, 8))
+        self.full_entry = ttk.Entry(
+            form_content, textvariable=self.full_var, width=16, validate="key", validatecommand=self.entry_validate_command
+        )
+        self.full_entry.grid(row=0, column=5, sticky="w", padx=(0, 20))
+
+        ttk.Label(form_content, text="当前读数").grid(row=0, column=6, sticky="w", padx=(0, 8))
         self.value_entry = ttk.Entry(
             form_content, textvariable=self.value_var, width=16, validate="key", validatecommand=self.entry_validate_command
         )
-        self.value_entry.grid(row=0, column=5, sticky="w")
-        self.input_widgets = [self.start_entry, self.end_entry, self.value_entry]
+        self.value_entry.grid(row=0, column=7, sticky="w")
+        self.input_widgets = [self.start_entry, self.end_entry, self.full_entry, self.value_entry]
 
         button_frame = ttk.Frame(right_frame)
         button_frame.grid(row=3, column=0, sticky="ew", pady=(12, 0))
@@ -181,7 +188,7 @@ class EvalAnnotationApp:
     def _has_valid_annotation(self, data):
         if not isinstance(data, dict):
             return False
-        for field_name in ("start", "end", "value"):
+        for field_name in ("start", "end", "full", "value"):
             value = data.get(field_name)
             if value is None:
                 return False
@@ -227,13 +234,14 @@ class EvalAnnotationApp:
         image_path = self.image_files[self.current_index]
         try:
             start = self._parse_number(self.start_var.get(), "起始读数", allow_empty=False)
-            end = self._parse_number(self.end_var.get(), "终止读数", allow_empty=True)
+            end = self._parse_number(self.end_var.get(), "第一刻度读数", allow_empty=True)
+            full = self._parse_number(self.full_var.get(), "终止读数", allow_empty=True)
             value = self._parse_number(self.value_var.get(), "当前读数", allow_empty=True)
         except ValueError as exc:
             messagebox.showerror("输入错误", str(exc))
             return False
 
-        data = {"filename": image_path.name, "start": start, "end": end, "value": value}
+        data = {"filename": image_path.name, "start": start, "end": end, "full": full, "value": value}
 
         annotation_path = self._annotation_path(image_path)
         with annotation_path.open("w", encoding="utf-8") as f:
@@ -248,11 +256,13 @@ class EvalAnnotationApp:
         if data is None:
             self.start_var.set("0")
             self.end_var.set("")
+            self.full_var.set("")
             self.value_var.set("")
             return
 
         self.start_var.set("" if data.get("start") is None else str(data.get("start")))
         self.end_var.set("" if data.get("end") is None else str(data.get("end")))
+        self.full_var.set("" if data.get("full") is None else str(data.get("full")))
         self.value_var.set("" if data.get("value") is None else str(data.get("value")))
 
     def _display_image(self, image_path):

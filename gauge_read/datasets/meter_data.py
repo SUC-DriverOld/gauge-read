@@ -90,14 +90,14 @@ class TextDataset(Dataset):
 
 
 class MeterDataset(TextDataset):
-    def __init__(self, root="./datas", mode="train", mode1="train1", is_training=True, transform=None, cfg=None):
+    def __init__(self, is_training=True, transform=None, cfg=None):
         super().__init__(transform, is_training)
         self.cfg = cfg
         self.dataset = []
         self.name = []
-        image_path = f"{root}/images/"
-        mask_path = f"{root}/annotations/{mode}"
-        mask_path1 = f"{root}/annotations/{mode1}"
+        image_path = cfg.data.image_path
+        mask_path = cfg.data.label_path[0]
+        mask_path1 = cfg.data.label_path[1]
 
         for image_name in os.listdir(image_path):
             mask_name = image_name.split(".")[0] + ".json"

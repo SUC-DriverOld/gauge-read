@@ -13,13 +13,17 @@ model:
   stds: [0.229, 0.224, 0.225]
 
 data:
+  image_path: datas/train/images
+  label_path: 
+  - datas/train/labels_0
+  - datas/train/labels_1
   test_size: [512, 1024]
   stn_correction: true
   stn_model_path: pretrain/stn/ep35_loss0.0551.pth
 
 predict:
   model_path: pretrain/meter/textgraph_convnext_tiny_100_release.pth
-  data_dir: datas/demo
+  data_dir: datas/test
   use_yolo: true
   use_stn: true
   yolo_model_path: pretrain/yolo/best.pt
