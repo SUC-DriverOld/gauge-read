@@ -11,6 +11,7 @@ if repo_root not in sys.path:
 
 from gauge_read.webui.app_logic import GaugeAppModel
 from gauge_read.utils.config import AttrDict
+from gauge_read.utils.logger import logger
 
 
 BATCH_RESULT_PLACEHOLDER = (
@@ -31,6 +32,7 @@ def init_runtime(config_path=None):
     resolved = config_path or os.environ.get("GAUGE_CONFIG", AttrDict.DEFAULT_CONFIG_PATH)
     cfg = AttrDict(resolved)
     app_logic = GaugeAppModel(cfg)
+    logger.debug("WebUI runtime initialized with config=%s", resolved)
 
 
 init_runtime()
@@ -38,6 +40,7 @@ init_runtime()
 
 def get_model_files(directory):
     if not os.path.exists(directory):
+        logger.warning("Model directory does not exist: %s", directory)
         return []
     valid_ext = {".pt", ".pth"}
     files = []
@@ -45,7 +48,9 @@ def get_model_files(directory):
         p = os.path.join(directory, f)
         if os.path.isfile(p) and os.path.splitext(f)[1].lower() in valid_ext:
             files.append(p)
-    return sorted(files)
+    files = sorted(files)
+    logger.debug("Discovered %s model files under %s", len(files), directory)
+    return files
 
 
 meter_dir = os.path.join(repo_root, "pretrain", "meter")
@@ -62,6 +67,7 @@ yolo_options = get_model_files(yolo_dir)
 
 
 def load_models_ui(model_path, stn_path, yolo_path):
+    logger.info("WebUI load_models triggered: textnet=%s, stn=%s, yolo=%s", model_path, stn_path, yolo_path)
     app_logic.load_models(model_path, stn_path, yolo_path)
     model_selection = gr.update(open=False)
     return model_path, stn_path, yolo_path, model_selection
@@ -69,7 +75,9 @@ def load_models_ui(model_path, stn_path, yolo_path):
 
 def process_ui(image, use_stn, use_yolo):
     if image is None:
+        logger.warning("WebUI single-image inference invoked without an uploaded image")
         return None, "请上传图片", 0.0, 0.0
+    logger.info("WebUI single-image inference triggered: use_stn=%s, use_yolo=%s", use_stn, use_yolo)
     vis_img, val, start_val, end_val = app_logic.process_image(image, use_stn, use_yolo)
     return vis_img, val, start_val, end_val
 
@@ -77,7 +85,9 @@ def process_ui(image, use_stn, use_yolo):
 def process_batch_ui(input_dir, use_stn, use_yolo, progress=None):
     if progress is None:
         progress = gr.Progress(track_tqdm=True)
+    logger.info("WebUI batch inference triggered: input_dir=%s, use_stn=%s, use_yolo=%s", input_dir, use_stn, use_yolo)
     result_html, zip_path, csv_path = app_logic.process_batch_directory(input_dir, use_stn, use_yolo, progress=progress)
+    logger.info("WebUI batch inference finished: zip=%s, csv=%s", zip_path, csv_path)
     return result_html, zip_path, csv_path
 
 
@@ -89,6 +99,7 @@ def update_point_ui(evt: gr.SelectData, mode):
     point_type = type_map.get(mode, "none")
 
     if point_type != "none":
+        logger.debug("WebUI point update requested: mode=%s, x=%s, y=%s", point_type, x, y)
         new_img, new_val = app_logic.update_point(point_type, x, y)
         return new_img, new_val
     else:
@@ -96,11 +107,13 @@ def update_point_ui(evt: gr.SelectData, mode):
 
 
 def update_start_val_ui(text):
+    logger.debug("WebUI start value updated manually: %s", text)
     new_img, new_val = app_logic.update_start_val(text)
     return new_img, new_val
 
 
 def update_end_val_ui(text):
+    logger.debug("WebUI end value updated manually: %s", text)
     new_img, new_val = app_logic.update_end_val(text)
     return new_img, new_val
 
@@ -181,10 +194,19 @@ with gr.Blocks(title="模拟仪表读数系统") as demo:
     start_val_input.change(update_start_val_ui, inputs=[start_val_input], outputs=[result_image, result_val])
     end_val_input.change(update_end_val_ui, inputs=[end_val_input], outputs=[result_image, result_val])
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Gauge Read WebUI")
     parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+    if args.debug:
+        import logging
+
+        logger.console_handler.setLevel(logging.DEBUG)
+        logger.info("WebUI console log level set to DEBUG")
+
+    logger.info("Starting Gauge Read WebUI with config=%s", args.config or "default")
 
     if args.config:
         init_runtime(args.config)

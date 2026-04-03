@@ -13,4 +13,5 @@ model/
 datas
 pretrain
 logs
+.logs
 .ruff_cache/

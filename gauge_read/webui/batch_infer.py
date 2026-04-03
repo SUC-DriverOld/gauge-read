@@ -11,6 +11,8 @@ import cv2
 import numpy as np
 from PIL import Image
 
+from gauge_read.utils.logger import logger
+
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 MAX_VISIBLE_BATCH_ROWS = 5
@@ -208,6 +210,7 @@ class BatchInferenceService:
             iterable = progress.tqdm(iterable, desc="正在批量推理", total=total_images, unit="img")
 
         for image_path in iterable:
+            logger.info("batch inference processing file: %s", image_path)
             try:
                 with Image.open(image_path) as pil_image:
                     rgb_image = pil_image.convert("RGB")

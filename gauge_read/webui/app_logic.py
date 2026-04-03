@@ -1,4 +1,3 @@
-import traceback
 import os
 import torch
 import cv2
@@ -13,6 +12,7 @@ from gauge_read.utils.converter import StringLabelConverter
 from gauge_read.utils.augmentation import BaseTransform
 from gauge_read.utils.tools import to_device
 from gauge_read.utils.stn_transform import STNTransformer
+from gauge_read.utils.logger import logger
 from gauge_read.inference import Detector
 from gauge_read.webui.batch_infer import BatchInferenceService
 
@@ -48,15 +48,24 @@ class GaugeAppModel:
         stn_path = stn_path if stn_path is not None else self.cfg.data.get("stn_model_path", "")
         yolo_path = yolo_path or self.cfg.predict.get("yolo_model_path", "")
 
+        logger.info(
+            "Loading models for GaugeAppModel: textnet=%s, stn=%s, yolo=%s, device=%s",
+            textnet_path,
+            stn_path or "disabled",
+            yolo_path or "default",
+            self.device,
+        )
+
         if not textnet_path or not os.path.exists(textnet_path):
             self.textnet = None
             self.detector = None
             msg = f"读数模型文件不存在: {textnet_path}"
+            logger.error(msg)
             gr.Error(msg)
             raise FileNotFoundError(msg)
 
         # Load TextNet
-        print(f"Loading TextNet from {textnet_path}")
+        logger.info("Loading TextNet from %s", textnet_path)
         self.textnet = TextNet(is_training=False, backbone=self.cfg.model.net, cfg=self.cfg)
 
         # Robust loading context
@@ -72,33 +81,47 @@ class GaugeAppModel:
             pretrained_dict = {k: v for k, v in state_dict.items() if k in model_dict and v.shape == model_dict[k].shape}
             model_dict.update(pretrained_dict)
             self.textnet.load_state_dict(model_dict)
+            logger.info(
+                "TextNet weights loaded: matched_keys=%s, total_checkpoint_keys=%s", len(pretrained_dict), len(state_dict)
+            )
         except Exception as e:
             self.textnet = None
             self.detector = None
             msg = f"无法加载读数模型: {str(e)}"
+            logger.exception("Failed to load TextNet weights from %s", textnet_path)
             gr.Error(msg)
+            raise
 
         self.textnet = self.textnet.to(self.device)
         self.textnet.eval()
         self.detector = TextDetector(self.textnet)
+        logger.info("TextNet moved to device and switched to eval mode: %s", self.device)
 
         # Load STN
         if stn_path:
-            print(f"Loading STN from {stn_path}")
+            logger.info("Loading STN from %s", stn_path)
             try:
                 self.stn = STNTransformer(stn_path, device=self.device)
+                if self.stn.model is None:
+                    logger.warning("STN initialization completed without an active model: %s", stn_path)
+                else:
+                    logger.info("STN loaded successfully from %s", stn_path)
             except Exception as e:
+                logger.exception("Failed to initialize STN from %s", stn_path)
                 gr.Error(f"无法加载STN模型: {str(e)}")
                 self.stn = None
         else:
             self.stn = None
+            logger.info("STN disabled for GaugeAppModel")
 
         # Load YOLO
         try:
-            print(f"Loading YOLO Detector from {yolo_path if yolo_path else 'default'}...")
+            logger.info("Loading YOLO detector from %s", yolo_path if yolo_path else "default")
             self.yolo_detector = Detector(cfg=self.cfg, weights=yolo_path if yolo_path else None)
             self.yolo_weights_path = yolo_path if yolo_path else self.cfg.predict.get("yolo_model_path", "")
+            logger.info("YOLO detector initialized successfully: weights=%s", self.yolo_weights_path)
         except Exception as e:
+            logger.exception("Failed to initialize YOLO detector from %s", yolo_path if yolo_path else "default")
             gr.Error(f"无法加载YOLO模型: {str(e)}")
             self.yolo_detector = None
             self.yolo_weights_path = None
@@ -109,7 +132,10 @@ class GaugeAppModel:
 
     def process_image(self, input_image, use_stn=True, use_yolo=False):
         if self.textnet is None:
+            logger.error("process_image called before TextNet was loaded")
             return None, "模型未加载", 0.0, 0.0
+
+        logger.info("Starting single-image inference: use_stn=%s, use_yolo=%s", use_stn, use_yolo)
 
         # Convert to numpy/cv2 if PIL
         if isinstance(input_image, Image.Image):
@@ -120,18 +146,22 @@ class GaugeAppModel:
             if len(image.shape) == 3 and image.shape[2] == 3:
                 # Gradio usually gives RGB, cv2 needs BGR
                 image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+        logger.debug("Prepared input image for inference with shape=%s", image.shape)
 
         # 1. Meter Detection (YOLO)
         meter_img = image
         if use_yolo:
             if self.yolo_detector is None:
+                logger.error("YOLO inference requested but YOLO detector is not loaded")
                 return None, "YOLO模型未正确加载，请先选择YOLO模型并点击加载模型", 0.0, 0.0
             # Assuming 'index' param in detector.detect is just for debug print/mask saving
             # We pass "web_upload"
             _, _, _, meter_list = self.yolo_detector.detect(image, "web_upload")
+            logger.debug("YOLO detection completed: detected_meters=%s", len(meter_list))
             if len(meter_list) > 0:
                 meter_img = meter_list[0]  # Take first detected meter
             else:
+                logger.warning("YOLO did not detect any meter in the current image")
                 return None, "YOLO未检测到仪表", 0.0, 0.0
 
         # 2. STN
@@ -144,10 +174,12 @@ class GaugeAppModel:
                 stn_img, _, warped_center = self.stn(meter_img, None)
                 processed_img = stn_img
                 predicted_center = warped_center
+                logger.debug("STN correction applied, predicted_center=%s", predicted_center)
             else:
                 # 不使用变形时，依然获取在原图(未变形)坐标系下的圆心
                 _, center_pixel = self.stn.get_homography_matrix(meter_img)
                 predicted_center = center_pixel
+                logger.debug("STN center predicted without warping, center=%s", predicted_center)
 
         # 3. TextNet Inference (使用 BaseTransform 获取统一坐标系和规范化的输入)
         trans_img_np, _ = self.transform(processed_img)
@@ -168,11 +200,12 @@ class GaugeAppModel:
         trans_img = trans_img_np.transpose(2, 0, 1)
         trans_img = torch.from_numpy(trans_img).unsqueeze(0)
         trans_img = to_device(trans_img, device=self.device)
+        logger.debug("Transformed image tensor ready for detector on device=%s", self.device)
 
         try:
             output = self.detector.detect1(trans_img)
         except Exception as e:
-            print(traceback.format_exc())
+            logger.exception("Text detector inference failed")
             return None, f"推理错误: {e}", 0.0, 0.0
 
         res = output
@@ -199,7 +232,7 @@ class GaugeAppModel:
         # 2. Get Std Points if not valid from model
         # The model tries to find them. If `std_points` from model is valid (len>=2), use it.
         # Note: `std_points` in `forward_inference` output might be [std_point[0], ref_point[0]] or similar
-        print(f"Model returned std_points: {std_points}")
+        logger.debug("Model returned std_points=%s", std_points)
 
         final_std = []
         if std_points and len(std_points) >= 2:
@@ -233,8 +266,17 @@ class GaugeAppModel:
         except ValueError:
             self.current_end_value = 0.0
             ocr_error = True
+            logger.warning("OCR transcript could not be converted to numeric value: %s", pred_transcripts)
 
         val = self.recalculate(ocr_error)
+        logger.info(
+            "Single-image inference completed: value=%s, ratio=%s, start_value=%s, end_value=%s, ocr_error=%s",
+            val,
+            self.current_ratio,
+            self.current_start_value,
+            self.current_end_value,
+            ocr_error,
+        )
 
         return self.draw_visualization(), val, self.current_start_value, self.current_end_value
 
@@ -285,7 +327,7 @@ class GaugeAppModel:
         self.current_ratio = ratio
         if ocr_error:
             return "OCR error, fallback to ratio-based reading: {:.2f}".format(val)
-
+        logger.info("Calculation completed: value=%s, ratio=%s", val, ratio)
         return val
 
     def draw_visualization(self):

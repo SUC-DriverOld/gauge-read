@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import os
 from gauge_read.models.stn import STNModel
+from gauge_read.utils.logger import logger
 
 
 class STNTransformer:
@@ -20,17 +21,19 @@ class STNTransformer:
                     self.model.load_state_dict(checkpoint["model_state_dict"])
                 else:
                     self.model.load_state_dict(checkpoint)
+                logger.info("STN model weights loaded from %s on device=%s", model_path, device)
             except Exception as e:
-                print(f"Error loading STN model: {e}")
+                logger.exception("Error loading STN model from %s", model_path)
                 self.model = None
                 return
         else:
-            print(f"STN model path not found: {model_path}")
+            logger.warning("STN model path not found: %s", model_path)
             self.model = None
             return
 
         self.model.to(device)
         self.model.eval()
+        logger.info("STN model moved to device and set to eval mode: %s", device)
 
     def _get_norm_mats(self, s):
         if s not in self._norm_cache:

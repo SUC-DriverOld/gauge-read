@@ -11,6 +11,7 @@ from gauge_read.utils.stn_transform import STNTransformer
 from gauge_read.utils.augmentation import BaseTransform
 from gauge_read.utils.config import AttrDict
 from gauge_read.utils.converter import StringLabelConverter
+from gauge_read.utils.logger import logger
 from gauge_read.utils.tools import to_device
 from gauge_read.utils.reader import MeterReader, TextDetector
 
@@ -26,6 +27,16 @@ class Detector(object):
         self.device = yolo_cfg.get("yolo_device", "auto")
         self.half = yolo_cfg.get("yolo_half", None)
         self.weights = weights if weights else yolo_cfg.get("yolo_model_path", "pretrain/best.pt")
+        logger.info(
+            "Initializing YOLO Detector: weights=%s, imgsz=%s, conf=%s, iou=%s, max_det=%s, device=%s, half=%s",
+            self.weights,
+            self.img_size,
+            self.threshold,
+            self.iou_threshold,
+            self.max_det,
+            self.device,
+            self.half,
+        )
         self.init_model()
 
     def init_model(self):
@@ -40,6 +51,7 @@ class Detector(object):
 
         self.m = YOLO(self.weights)
         self.names = self.m.names
+        logger.info("YOLO model loaded successfully: resolved_device=%s, use_half=%s", self.device, self.use_half)
 
     def _get_label(self, cls_id):
         if isinstance(self.names, dict):
@@ -50,6 +62,7 @@ class Detector(object):
 
     def detect(self, im, _):
         im0 = im.copy()
+        logger.debug("Running YOLO detection on image with shape=%s", im0.shape)
         results = self.m.predict(
             source=im0,
             imgsz=self.img_size,
@@ -66,6 +79,7 @@ class Detector(object):
         digital_list, meter_list = [], []
 
         if not results:
+            logger.warning("YOLO predict returned no results object")
             return im0, image_info, digital_list, meter_list
 
         result = results[0]
@@ -73,6 +87,7 @@ class Detector(object):
         annotated = result.plot()
 
         if boxes is None or len(boxes) == 0:
+            logger.info("YOLO predict returned zero boxes")
             return annotated, image_info, digital_list, meter_list
 
         xyxy = boxes.xyxy.detach().cpu().numpy().astype(np.int32)
@@ -104,6 +119,9 @@ class Detector(object):
             key = "{}-{:02}".format(lbl, count)
             image_info[key] = ["{}x{}".format(x2 - x1, y2 - y1), np.round(conf, 3)]
 
+        logger.debug(
+            "YOLO detection finished: meters=%s, digitals=%s, total_regions=%s", len(meter_list), len(digital_list), count
+        )
         return annotated, image_info, digital_list, meter_list
 
 
@@ -111,38 +129,44 @@ def main(args, cfg):
     stn_transformer = None
     if cfg.predict.get("use_stn", False):
         stn_model_path = cfg.data.get("stn_model_path", "")
-        print(f"Initializing STN from {stn_model_path}")
+        logger.info("Initializing STN for inference from %s", stn_model_path)
         stn_transformer = STNTransformer(stn_model_path, device=cfg.system.device)
 
     predict_dir = args.data_dir or cfg.predict.get("data_dir", "datas/demo")
+    logger.info("Starting offline inference: predict_dir=%s", predict_dir)
 
     if not os.path.isdir(predict_dir):
+        logger.error("Predict directory not found: %s", predict_dir)
         raise NotADirectoryError(f"Predict directory not found: {predict_dir}")
 
     model = TextNet(is_training=False, backbone=cfg.model.net, cfg=cfg)
     model_path = cfg.predict.model_path
     if not os.path.exists(model_path):
+        logger.error("Inference model checkpoint not found: %s", model_path)
         raise FileNotFoundError(
             f"Model checkpoint not found: {model_path}. "
             "Please update `predict.model_path` in gauge_read/configs/config.yaml or provide a valid config file."
         )
-    model.load_model(model_path)
+    state_dict = torch.load(model_path)
+    model.load_state_dict(state_dict["model"])
     model = model.to(cfg.system.device)
+    logger.info("Inference TextNet loaded and moved to device=%s", cfg.system.device)
     converter = StringLabelConverter()
 
     det = Detector(cfg=cfg)
     detector = TextDetector(model)
-    meter = MeterReader()
+    meter = MeterReader(debug=True)
     transform = BaseTransform(size=cfg.data.test_size, mean=cfg.model.means, std=cfg.model.stds)
 
     image_list = os.listdir(predict_dir)
+    logger.info("Found %s files in predict directory", len(image_list))
     for index in image_list:
-        print("**************", index)
+        logger.info("Processing inference image: %s", index)
         image_path = os.path.join(predict_dir, index)
         image = cv2.imread(image_path)
 
         if image is None:
-            print(f"Warning: Failed to load image from {image_path}. Skipping.")
+            logger.warning("Failed to load image from %s; skipping", image_path)
             continue
 
         cv2.imshow("det1", image)
@@ -154,13 +178,16 @@ def main(args, cfg):
             meter_list = [image]
 
         if len(meter_list) == 0:
-            print("no detected meter")
+            logger.warning("No meter detected for image %s", index)
             continue
+
+        logger.info("Inference image %s yielded %s meter candidates", index, len(meter_list))
 
         for meter_img in meter_list:
             predicted_center = None
             if stn_transformer is not None:
                 meter_img, _, predicted_center = stn_transformer(meter_img, None)
+                logger.debug("STN processed meter candidate, predicted_center=%s", predicted_center)
 
             cv2.imshow("det", meter_img)
             cv2.waitKey(0)
@@ -171,8 +198,8 @@ def main(args, cfg):
             norm_img = to_device(norm_img, device=cfg.system.device)
             try:
                 output = detector.detect1(norm_img)
-            except Exception as e:
-                print(f"Detection error: {e}")
+            except Exception as _:
+                logger.exception("Detection error during offline inference for image %s", index)
                 continue
 
             pointer_pred, dail_pred, text_pred, preds, std_points, aux_map = (
@@ -196,6 +223,15 @@ def main(args, cfg):
             else:
                 pred_transcripts = None
 
+            logger.info(
+                "Offline inference result for %s: has_pointer=%s, has_text=%s, has_std_points=%s, transcript=%s",
+                index,
+                pointer_pred is not None,
+                text_pred is not None,
+                std_points is not None,
+                pred_transcripts,
+            )
+
             img_show = norm_img[0].permute(1, 2, 0).cpu().numpy()
             img_show = ((img_show * np.array(cfg.model.stds) + np.array(cfg.model.means)) * 255).astype(np.uint8)
 
@@ -208,6 +244,8 @@ def main(args, cfg):
                 std_points,
                 getattr(stn_transformer, "last_center", predicted_center),
             )
+
+    logger.info("Offline inference finished for directory %s", predict_dir)
 
 
 if __name__ == "__main__":
@@ -222,9 +260,16 @@ if __name__ == "__main__":
         default=None,
         help="Directory containing images to predict. Overrides config/default path.",
     )
+    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args()
+    if args.debug:
+        import logging
+
+        logger.console_handler.setLevel(logging.DEBUG)
+        logger.info("WebUI console log level set to DEBUG")
 
     cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
+    logger.info("Launching offline inference with config=%s", args.config or AttrDict.DEFAULT_CONFIG_PATH)
     cfg.print_config()
 
     main(args, cfg)

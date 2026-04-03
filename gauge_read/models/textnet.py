@@ -6,6 +6,7 @@ import cv2
 
 from gauge_read.models.convnext import ConvNeXtTiny
 from gauge_read.models.crnn import CRNN
+from gauge_read.utils.logger import logger
 from gauge_read.utils.roi import batch_roi_transform
 from gauge_read.utils.converter import keys
 from gauge_read.utils.tools import order_points
@@ -108,7 +109,9 @@ class TextNet(nn.Module):
 
         model_cfg = cfg.model if cfg is not None and "model" in cfg else {}
         self.use_multimodal = model_cfg.get("use_multimodal", False)
-        print(f"TextNet Multimodal Status: {self.use_multimodal}")
+        logger.info(
+            "Initializing TextNet: backbone=%s, is_training=%s, use_multimodal=%s", backbone, is_training, self.use_multimodal
+        )
 
         self.is_training = is_training
         self.backbone_name = backbone
@@ -126,11 +129,6 @@ class TextNet(nn.Module):
             self.blackhat_gen = TorchBlackHatModule()
         else:
             self.blackhat_gen = None
-
-    def load_model(self, model_path):
-        print("Loading from {}".format(model_path))
-        state_dict = torch.load(model_path)
-        self.load_state_dict(state_dict["model"])
 
     def _prepare_backbone_input(self, x_input):
         if self.use_multimodal:
@@ -175,35 +173,72 @@ class TextNet(nn.Module):
         return predict_out, (preds, preds_size)
 
     def forward_inference(self, x_input):
+        logger.debug(
+            "forward_inference start: input_shape=%s use_multimodal=%s device=%s",
+            tuple(x_input.shape),
+            self.use_multimodal,
+            x_input.device,
+        )
         x, aux = self._prepare_backbone_input(x_input)
+        logger.debug(
+            "forward_inference backbone input prepared: feature_shape=%s aux_shape=%s",
+            tuple(x.shape),
+            tuple(aux.shape) if aux is not None else None,
+        )
 
         up1, up2, up3, up4, up5 = self.fpn(x)
         output = self.predict(up1)
+        logger.debug(
+            "forward_inference neck output: up1=%s up2=%s up3=%s up4=%s up5=%s predict=%s",
+            tuple(up1.shape),
+            tuple(up2.shape),
+            tuple(up3.shape),
+            tuple(up4.shape),
+            tuple(up5.shape),
+            tuple(output.shape),
+        )
 
         # Vectorized thresholding for three segmentation maps.
         probs = torch.sigmoid(output[0])
         th = torch.tensor([0.5, 0.5, 0.7], device=probs.device).view(3, 1, 1)
         binary = (probs > th).to(torch.uint8).cpu().numpy()
         pointer_pred, dail_pred, text_pred = binary[0], binary[1], binary[2]
+        logger.debug(
+            "forward_inference mask summary: pointer_pixels=%s dail_pixels=%s text_pixels=%s",
+            int(pointer_pred.sum()),
+            int(dail_pred.sum()),
+            int(text_pred.sum()),
+        )
 
         dail_label = self.filter(dail_pred, n=30)
         text_label = self.filter(text_pred)
 
         dail_contours, std_point = self._mask_to_contours_and_centers(dail_label)
         text_contours, ref_point = self._mask_to_contours_and_centers(text_label)
+        logger.debug(
+            "forward_inference contour summary: dail_contours=%s text_contours=%s std_point=%s ref_point=%s",
+            len(dail_contours),
+            len(text_contours),
+            std_point,
+            ref_point,
+        )
 
         if len(std_point) == 0:
+            logger.debug("forward_inference exit: no dial anchor points found")
             return pointer_pred, dail_label, text_label, (None, None), None, None
 
         if len(std_point) < 2:
             if len(ref_point) == 0:
+                logger.debug("forward_inference exit: only one dial point and no text reference point")
                 return pointer_pred, dail_label, text_label, (None, None), None, None
             std_point.append(ref_point[0])
+            logger.debug("forward_inference supplemented std_point with text reference: %s", std_point)
         else:
             if std_point[0][1] >= std_point[1][1]:
                 pass
             else:
                 std_point[0], std_point[1] = std_point[1], std_point[0]
+            logger.debug("forward_inference normalized std_point order: %s", std_point)
 
         if len(text_contours) != 0:
             # Select text contour nearest to std end point.
@@ -212,9 +247,18 @@ class TextNet(nn.Module):
             dists = np.sum((ref_arr - target) ** 2, axis=1)
             index = int(np.argmin(dists))
             preds, preds_size = self._run_recognizer_from_box(x, text_contours[index])
+            logger.debug(
+                "forward_inference recognizer selected contour_index=%s target=%s min_dist=%.4f preds_shape=%s preds_size=%s",
+                index,
+                std_point[1],
+                float(dists[index]),
+                tuple(preds.shape),
+                tuple(preds_size.shape),
+            )
         else:
             preds = None
             preds_size = None
+            logger.debug("forward_inference skipped recognizer: no text contours found")
 
         # Prepare auxiliary map for visualization if it exists
         aux_map = None
@@ -222,6 +266,11 @@ class TextNet(nn.Module):
             # aux is (B, 1, H, W). Take 0th in batch, 0th channel
             aux_map = aux[0, 0].cpu().numpy()
             aux_map = (aux_map * 255).astype(np.uint8)
+            logger.debug("forward_inference prepared aux_map: shape=%s dtype=%s", aux_map.shape, aux_map.dtype)
+
+        logger.debug(
+            "forward_inference done: std_point=%s has_recog=%s has_aux=%s", std_point, preds is not None, aux_map is not None
+        )
 
         return pointer_pred, dail_label, text_label, (preds, preds_size), std_point, aux_map
 

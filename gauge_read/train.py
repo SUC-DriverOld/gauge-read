@@ -24,6 +24,7 @@ from gauge_read.utils.augmentation import Augmentation
 from gauge_read.utils.config import AttrDict
 from gauge_read.utils.tools import AverageMeter, to_device, collate_fn
 from gauge_read.utils.converter import StringLabelConverter
+from gauge_read.utils.logger import logger
 
 lr = None
 train_step = 0
@@ -33,6 +34,7 @@ converter = StringLabelConverter()
 def parse_args():
     parser = argparse.ArgumentParser(description="Train Gauge Read TextNet")
     parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
     return parser.parse_args()
 
 
@@ -41,7 +43,7 @@ def save_model(model, epoch, lr, optimzer, cfg):
     os.makedirs(save_dir, exist_ok=True)
 
     save_path = os.path.join(save_dir, "textgraph_{}_{}.pth".format(model.backbone_name, epoch))
-    print("Saving to {}.".format(save_path))
+    logger.info("Saving training checkpoint to %s", save_path)
     state_dict = {"epoch": epoch, "model": model.state_dict()}
     torch.save(state_dict, save_path)
 
@@ -55,6 +57,7 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, c
     end = time.time()
     model.train()
     # scheduler.step()
+    logger.info("Starting training epoch %s with %s batches", epoch, len(train_loader))
 
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch}")
     for i, (img, pointer_mask, dail_mask, text_mask, train_mask, transcripts, bboxs, mapping) in pbar:
@@ -65,6 +68,19 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, c
         img, pointer_mask, dail_mask, text_mask, train_mask = to_device(
             img, pointer_mask, dail_mask, text_mask, train_mask, device=cfg.system.device
         )
+
+        if i == 0:
+            logger.debug(
+                "Epoch %s first batch shapes: img=%s, pointer=%s, dail=%s, text=%s, train_mask=%s, bbox_count=%s, mapping_len=%s",
+                epoch,
+                tuple(img.shape),
+                tuple(pointer_mask.shape),
+                tuple(dail_mask.shape),
+                tuple(text_mask.shape),
+                tuple(train_mask.shape),
+                len(bboxs),
+                len(mapping),
+            )
 
         output, pred_recog = model(img, bboxs, mapping)  # 4*12*640*640
 
@@ -98,6 +114,18 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, c
             writer.add_scalar("Train/Rec_Loss", loss_rec.item(), train_step)
             writer.add_scalar("Train/LR", scheduler.get_last_lr()[0], train_step)
             writer.flush()
+            logger.debug(
+                "Train step %s summary: loss=%.4f ptr=%.4f dial=%.4f txt=%.4f rec=%.4f lr=%.6e data_time=%.4f batch_time=%.4f",
+                train_step,
+                loss.item(),
+                loss_pointer.item(),
+                loss_dail.item(),
+                loss_text.item(),
+                loss_rec.item(),
+                scheduler.get_last_lr()[0],
+                data_time.val,
+                batch_time.val,
+            )
 
         pbar.set_postfix(
             {
@@ -112,7 +140,7 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, c
     if epoch % cfg.training.save_freq == 0:
         save_model(model, epoch, scheduler.get_last_lr()[0], optimizer, cfg)
 
-    print("Training Loss: {}".format(losses.avg))
+    logger.info("Finished training epoch %s: avg_loss=%.6f", epoch, losses.avg)
 
 
 def main(cfg):
@@ -121,6 +149,7 @@ def main(cfg):
     stds = tuple(cfg.model.stds)
 
     transform = Augmentation(size=640, mean=means, std=stds)
+    logger.info("Training transform initialized: size=%s, means=%s, stds=%s", 640, means, stds)
 
     trainset = MeterDataset(transform=transform, cfg=cfg)
     train_loader = data.DataLoader(
@@ -131,14 +160,22 @@ def main(cfg):
         pin_memory=True,
         collate_fn=collate_fn,
     )
+    logger.info(
+        "Training dataset and loader ready: dataset_size=%s, batch_size=%s, num_workers=%s",
+        len(trainset),
+        cfg.training.batch_size,
+        cfg.system.num_workers,
+    )
 
     # Model
     model = TextNet(backbone=cfg.model.net, is_training=True, cfg=cfg)
 
     model = model.to(cfg.system.device)
+    logger.info("Training model initialized: backbone=%s, device=%s", cfg.model.net, cfg.system.device)
 
     if cfg.system.cuda:
         cudnn.benchmark = True
+        logger.info("CUDA benchmark enabled")
 
     criterion = TextLoss()
 
@@ -156,6 +193,8 @@ def main(cfg):
     else:
         raise ValueError(f"Unsupported optimizer: {cfg.training.optim}. Use AdamW/Adam/SGD.")
 
+    logger.info("Optimizer initialized: type=%s, lr=%s, weight_decay=%s", cfg.training.optim, lr, weight_decay)
+
     lr_adjust = str(cfg.training.get("lr_adjust", "cosine")).lower()
     if lr_adjust in {"cos", "cosine", "cosine_annealing"}:
         eta_min = cfg.training.get("eta_min", lr * 0.01)
@@ -168,16 +207,24 @@ def main(cfg):
     else:
         raise ValueError(f"Unsupported lr_adjust: {cfg.training.lr_adjust}. Use cosine/step.")
 
+    logger.info("Scheduler initialized: type=%s", cfg.training.lr_adjust)
+
     # Tensorboard writer
     log_dir = os.path.join("logs", cfg.experiment.exp_name)
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(log_dir=log_dir)
+    logger.info("TensorBoard writer initialized at %s", log_dir)
 
-    print("Start training")
+    logger.info(
+        "Start training: exp_name=%s, epochs=%s, start_epoch=%s",
+        cfg.experiment.exp_name,
+        cfg.training.max_epoch,
+        cfg.training.start_epoch,
+    )
     for epoch in range(cfg.training.start_epoch, cfg.training.start_epoch + cfg.training.max_epoch + 1):
         train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, cfg)  # train
         scheduler.step()
-    print("End.")
+    logger.info("Training finished for experiment %s", cfg.experiment.exp_name)
 
     writer.close()
 
@@ -187,7 +234,14 @@ def main(cfg):
 
 if __name__ == "__main__":
     args = parse_args()
+    if args.debug:
+        import logging
+
+        logger.console_handler.setLevel(logging.DEBUG)
+        logger.info("WebUI console log level set to DEBUG")
+
     cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
+    logger.info("Launching train.py with config=%s", args.config or AttrDict.DEFAULT_CONFIG_PATH)
 
     seed = int(cfg.training.get("seed", 114514))
     random.seed(seed)
@@ -195,6 +249,7 @@ if __name__ == "__main__":
     torch.manual_seed(seed)
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
+    logger.info("Training random seeds initialized to %s", seed)
 
     cfg.print_config()
     main(cfg)

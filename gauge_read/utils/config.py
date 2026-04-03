@@ -3,6 +3,8 @@ import os
 import torch
 import yaml
 
+from gauge_read.utils.logger import logger
+
 
 class AttrDict(dict):
     """A dictionary with attribute-style access. It maps attribute access to

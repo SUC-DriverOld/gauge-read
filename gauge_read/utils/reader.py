@@ -3,15 +3,29 @@ import numpy as np
 import torch
 from skimage import morphology
 
+from gauge_read.utils.logger import logger
+
 
 class TextDetector(object):
     def __init__(self, model):
         self.model = model
         model.eval()
+        logger.debug("TextDetector initialized with model=%s", model.__class__.__name__)
 
     def detect1(self, image):
+        logger.debug("TextDetector.detect1 start: image_shape=%s", tuple(image.shape))
         with torch.no_grad():
             pointer_pred, dail_pred, text_pred, pred_recog, std_points, aux_map = self.model.forward_inference(image)
+
+        logger.debug(
+            "TextDetector.detect1 finished: pointer_pixels=%s dail_pixels=%s text_pixels=%s std_points=%s has_recog=%s has_aux=%s",
+            int(pointer_pred.sum()) if pointer_pred is not None else None,
+            int(dail_pred.sum()) if dail_pred is not None else None,
+            int(text_pred.sum()) if text_pred is not None else None,
+            std_points,
+            pred_recog[0] is not None if pred_recog is not None else False,
+            aux_map is not None,
+        )
 
         image = image[0].data.cpu().numpy()
 
@@ -46,8 +60,10 @@ class MeterReader(object):
             float: The calculated reading value.
         """
         if not std_points or len(std_points) < 2:
+            logger.warning("compute_reading skipped: invalid std_points=%s", std_points)
             return float(start_val), 0.0
         if not pointer_line or len(pointer_line) < 2:
+            logger.warning("compute_reading skipped: invalid pointer_line=%s", pointer_line)
             return float(start_val), 0.0
 
         p1 = np.array(std_points[0])
@@ -61,6 +77,7 @@ class MeterReader(object):
         else:
             center_coords = self.calculate_center_from_geometry(std_points, pointer_line)
             if center_coords is None:
+                logger.debug("compute_reading fallback to pointer root as center")
                 center = ptr_root
             else:
                 center = np.array(center_coords)
@@ -84,6 +101,12 @@ class MeterReader(object):
         ptr_angle = diff_angle(ang_ptr, ang_start)
 
         if total_angle < 1e-3:
+            logger.warning(
+                "compute_reading skipped: degenerate total_angle start=%s end=%s center=%s",
+                p1.tolist(),
+                p2.tolist(),
+                center.tolist(),
+            )
             return float(start_val), 0.0
 
         ratio = ptr_angle / total_angle
@@ -95,8 +118,7 @@ class MeterReader(object):
     def __call__(self, image, point_mask, dail_mask, word_mask, number, std_point, predicted_center=None):
         img_result = image.copy()
         value = self.find_lines(img_result, point_mask, dail_mask, word_mask, number, std_point, predicted_center)
-        if self.debug:
-            print("value", value)
+        logger.debug("meter reader result=%s", value)
 
         return value
 
@@ -124,6 +146,7 @@ class MeterReader(object):
 
         pointer_lines = cv2.HoughLinesP(pointer_edges, 1, np.pi / 180, 10, np.array([]), minLineLength=10, maxLineGap=400)
         if pointer_lines is None or len(pointer_lines) == 0:
+            logger.warning("pointer detection failed: no Hough line candidates")
             return "can not detect pointer"
 
         # Pick the longest candidate for better robustness than taking the first line.
@@ -145,8 +168,7 @@ class MeterReader(object):
             # Draw predicted center
             if self.debug:
                 cv2.circle(ori_img, center, 5, (0, 0, 255), -1)
-            if self.debug:
-                print(f"Using predicted center from STN: {center}")
+            logger.debug("using predicted center from STN: %s", center)
         else:
             # Try to calculate a better center using geometry:
             # Intersection of pointer line and the perpendicular bisector of the two scale points
@@ -170,6 +192,7 @@ class MeterReader(object):
         # print("pointer_line", pointer_line)
 
         if std_point is None:
+            logger.warning("dial detection failed: std_point is missing")
             return "can not detect dail"
 
         # calculate angle
@@ -181,10 +204,7 @@ class MeterReader(object):
         one = [[pointer_line[0][0], pointer_line[0][1]], [a1[0], a1[1]]]
         two = [[pointer_line[0][0], pointer_line[0][1]], [a2[0], a2[1]]]
         three = [[pointer_line[0][0], pointer_line[0][1]], [pointer_line[1][0], pointer_line[1][1]]]
-        if self.debug:
-            print("one", one)
-            print("two", two)
-            print("three", three)
+        logger.debug("angle vectors one=%s two=%s three=%s", one, two, three)
 
         one = np.array(one)
         two = np.array(two)
@@ -203,21 +223,18 @@ class MeterReader(object):
         # print("flag",flag)
 
         std_ang = self.angle(v1, v2)
-        if self.debug:
-            print("std_result", std_ang)
+        logger.debug("std angle=%s", std_ang)
         now_ang = self.angle(v1, v3)
         if flag > 0:
             now_ang = 360 - now_ang
-        if self.debug:
-            print("now_result", now_ang)
+        logger.debug("pointer angle=%s", now_ang)
 
         # calculate value
         ratio = 0.0
         if std_ang != 0:
             ratio = now_ang / std_ang
 
-        if self.debug:
-            print(f"Angle Ratio (Pointer/Full): {ratio:.4f}")
+        logger.debug("angle ratio pointer/full=%.4f", ratio)
 
         if number is not None and number[0] != "":
             two_value = float(number[0])
@@ -234,6 +251,7 @@ class MeterReader(object):
             value = two_value / std_ang
             value = value * now_ang
         else:
+            logger.warning("angle detection failed: std_ang=%s now_ang=%s", std_ang, now_ang)
             return "angle detect error"
 
         if flag > 0 and distance < 40:

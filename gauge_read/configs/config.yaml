@@ -15,14 +15,14 @@ model:
 data:
   test_size: [512, 1024]
   stn_correction: true
-  stn_model_path: logs/stn_convnext/ep2_loss0.1756.pth
+  stn_model_path: pretrain/stn/ep35_loss0.0551.pth
 
 predict:
-  model_path: logs/multimodal_convnext/textgraph_convnext_tiny_25.pth
+  model_path: pretrain/meter/textgraph_convnext_tiny_100_release.pth
   data_dir: datas/demo
   use_yolo: true
   use_stn: true
-  yolo_model_path: pretrain/best.pt
+  yolo_model_path: pretrain/yolo/best.pt
   yolo_imgsz: 640
   yolo_conf: 0.6
   yolo_iou: 0.3

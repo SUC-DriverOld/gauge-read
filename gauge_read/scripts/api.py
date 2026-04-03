@@ -18,6 +18,7 @@ if repo_root not in sys.path:
 
 from gauge_read.webui.app_logic import GaugeAppModel
 from gauge_read.utils.config import AttrDict
+from gauge_read.utils.logger import logger
 
 app = FastAPI(title="Gauge Reader API")
 _infer_lock = threading.Lock()
@@ -47,6 +48,7 @@ def _get_cfg():
     global _cfg
     if _cfg is None:
         _cfg = AttrDict(AttrDict.DEFAULT_CONFIG_PATH)
+        logger.info("API default configuration loaded: %s", AttrDict.DEFAULT_CONFIG_PATH)
     return _cfg
 
 
@@ -55,15 +57,17 @@ def init_app_logic(yolo_path=None, stn_path=None, textnet_path=None):
     cfg = _get_cfg()
     yolo, stn, textnet = _resolve_model_paths(cfg, yolo_path, stn_path, textnet_path)
 
-    print("Initializing Gauge Model...")
+    logger.info("Initializing Gauge Model for API: textnet=%s, stn=%s, yolo=%s", textnet, stn or "disabled", yolo)
     _app_logic = GaugeAppModel(cfg)
     _app_logic.load_models(textnet_path=textnet, stn_path=stn, yolo_path=yolo)
+    logger.info("Gauge API model initialization completed")
 
 
 @app.on_event("startup")
 def startup_event():
     # Keep module-mode startup working: uvicorn gauge_read.scripts.api:app
     if _app_logic is None:
+        logger.info("FastAPI startup event triggered; initializing model state")
         init_app_logic()
 
 
@@ -86,15 +90,29 @@ class GaugeResponse(BaseModel):
 @app.post("/predict", response_model=GaugeResponse)
 def predict(req: GaugeRequest):
     if _app_logic is None:
+        logger.error("API predict called before model initialization")
         raise HTTPException(status_code=500, detail="Model is not initialized")
 
+    logger.info(
+        "API predict request received: image_path=%s, use_yolo=%s, use_stn=%s, start_override=%s, end_override=%s",
+        req.image_path,
+        req.use_yolo,
+        req.use_stn,
+        req.start_value,
+        req.end_value,
+    )
+
     if not os.path.exists(req.image_path):
+        logger.warning("API request image path not found: %s", req.image_path)
         raise HTTPException(status_code=400, detail=f"Image path not found: {req.image_path}")
 
     # Read Image
     image = cv2.imread(req.image_path)
     if image is None:
+        logger.warning("API failed to decode image: %s", req.image_path)
         raise HTTPException(status_code=400, detail="Failed to read image")
+
+    logger.debug("API input image loaded with shape=%s", image.shape)
 
     # Process
     # process_image returns: display_img, val, start_val, end_val
@@ -105,9 +123,11 @@ def predict(req: GaugeRequest):
 
     # GaugeAppModel contains mutable current_* state, so use a lock to avoid cross-request contamination.
     with _infer_lock:
+        logger.debug("API inference lock acquired")
         vis_img, val, auto_start, auto_end = _app_logic.process_image(image, use_stn=req.use_stn, use_yolo=req.use_yolo)
 
         if val is None:
+            logger.error("API inference returned no value: %s", vis_img)
             raise HTTPException(status_code=500, detail=f"Inference failed: {vis_img}")
 
         # Override values if provided.
@@ -115,16 +135,27 @@ def predict(req: GaugeRequest):
         if req.start_value is not None:
             _app_logic.current_start_value = req.start_value
             need_recalc = True
+            logger.info("API start value override applied: %s", req.start_value)
 
         if req.end_value is not None:
             _app_logic.current_end_value = req.end_value
             need_recalc = True
+            logger.info("API end value override applied: %s", req.end_value)
 
         final_val = val
         if need_recalc:
+            logger.info("API recalculating result after manual overrides")
             final_val = _app_logic.recalculate()
 
         final_ratio = getattr(_app_logic, "current_ratio", 0.0)
+
+        logger.info(
+            "API inference completed: measure_value=%s, ratio=%s, start_value=%s, end_value=%s",
+            final_val,
+            final_ratio,
+            _app_logic.current_start_value,
+            _app_logic.current_end_value,
+        )
 
         return GaugeResponse(
             measure_value=final_val,
@@ -137,5 +168,11 @@ def predict(req: GaugeRequest):
 if __name__ == "__main__":
     args = parse_args()
     _cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
+    logger.info(
+        "Starting Gauge Reader API: host=%s, port=%s, config=%s",
+        args.host,
+        args.port,
+        args.config or AttrDict.DEFAULT_CONFIG_PATH,
+    )
     init_app_logic(yolo_path=args.yolo, stn_path=args.stn, textnet_path=args.textnet)
     uvicorn.run(app, host=args.host, port=args.port)
