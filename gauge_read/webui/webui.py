@@ -9,9 +9,9 @@ repo_root = os.path.dirname(package_root)
 if repo_root not in sys.path:
     sys.path.append(repo_root)
 
-from gauge_read.webui.app_logic import GaugeAppModel
 from gauge_read.utils.config import AttrDict
 from gauge_read.utils.logger import logger
+from gauge_read.webui.webui_logic import GaugeAppWebUI
 
 
 BATCH_RESULT_PLACEHOLDER = (
@@ -31,7 +31,7 @@ def init_runtime(config_path=None):
     global cfg, app_logic
     resolved = config_path or os.environ.get("GAUGE_CONFIG", AttrDict.DEFAULT_CONFIG_PATH)
     cfg = AttrDict(resolved)
-    app_logic = GaugeAppModel(cfg)
+    app_logic = GaugeAppWebUI(cfg)
     logger.debug("WebUI runtime initialized with config=%s", resolved)
 
 

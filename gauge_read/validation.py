@@ -2,8 +2,6 @@ import argparse
 import csv
 import json
 import math
-import os
-import sys
 from collections import Counter
 from pathlib import Path
 
@@ -13,14 +11,9 @@ from PIL import Image
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-if __package__ is None or __package__ == "":
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if repo_root not in sys.path:
-        sys.path.insert(0, repo_root)
-
 from gauge_read.utils.config import AttrDict
 from gauge_read.utils.logger import logger
-from gauge_read.webui.app_logic import GaugeAppModel
+from gauge_read.utils.app_logic import GaugeApp
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
@@ -29,11 +22,16 @@ EPS = 1e-8
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Gauge validation script")
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("-c", "--config", type=str, default=AttrDict.DEFAULT_CONFIG_PATH, help="Path to config YAML")
-    parser.add_argument("-i", "--input-dir", type=str, required=True, help="Validation directory containing images/ and labels/")
+    parser.add_argument(
+        "-i", "--input-dir", type=str, required=True, help="Validation directory containing images/ and labels/"
+    )
     parser.add_argument("--use_yolo", action="store_true", help="Enable YOLO detection during validation")
     parser.add_argument("--use_stn", action="store_true", help="Enable STN correction during validation")
-    parser.add_argument("--output_dir", type=str, default=None, help="Directory to export validation_summary.json and validation_details.csv")
+    parser.add_argument(
+        "--output_dir", type=str, default=None, help="Directory to export validation_summary.json and validation_details.csv"
+    )
     return parser.parse_args()
 
 
@@ -82,7 +80,9 @@ def _collect_pairs(input_dir):
         if image_path.is_file() and image_path.suffix.lower() in IMAGE_EXTENSIONS
     }
     label_map = {
-        label_path.stem: label_path for label_path in sorted(label_dir.iterdir()) if label_path.is_file() and label_path.suffix.lower() == ".json"
+        label_path.stem: label_path
+        for label_path in sorted(label_dir.iterdir())
+        if label_path.is_file() and label_path.suffix.lower() == ".json"
     }
 
     if not image_map:
@@ -206,17 +206,7 @@ def _plot_metric_overview(summary, charts_dir):
         summary["reading"]["acc@5%"] or 0.0,
         summary["reading"]["acc@10%"] or 0.0,
     ]
-    colors = [
-        "#4C78A8",
-        "#4C78A8",
-        "#4C78A8",
-        "#F58518",
-        "#F58518",
-        "#F58518",
-        "#54A24B",
-        "#54A24B",
-        "#54A24B",
-    ]
+    colors = ["#4C78A8", "#4C78A8", "#4C78A8", "#F58518", "#F58518", "#F58518", "#54A24B", "#54A24B", "#54A24B"]
 
     fig, ax = plt.subplots(figsize=(11, 5.5))
     bars = ax.bar(labels, values, color=colors)
@@ -326,7 +316,9 @@ def _plot_ocr_category_distribution(detail_rows, charts_dir):
     colors = ["#54A24B", "#EECA3B", "#E45756", "#B279A2"][: len(labels)]
 
     fig, ax = plt.subplots(figsize=(7, 5.5))
-    ax.pie(values, labels=labels, autopct="%.1f%%", startangle=90, colors=colors, wedgeprops={"linewidth": 1, "edgecolor": "white"})
+    ax.pie(
+        values, labels=labels, autopct="%.1f%%", startangle=90, colors=colors, wedgeprops={"linewidth": 1, "edgecolor": "white"}
+    )
     ax.set_title("OCR Outcome Distribution")
     return _save_figure(fig, charts_dir / "ocr_distribution.png")
 
@@ -347,11 +339,7 @@ def _generate_charts(summary, detail_rows, output_dir):
 def run_validation(cfg, input_dir, use_yolo=False, use_stn=False, config_path=None, output_dir=None):
     pairs = _collect_pairs(input_dir)
     logger.info(
-        "Validation started: input_dir=%s, samples=%s, use_yolo=%s, use_stn=%s",
-        input_dir,
-        len(pairs),
-        use_yolo,
-        use_stn,
+        "Validation started: input_dir=%s, samples=%s, use_yolo=%s, use_stn=%s", input_dir, len(pairs), use_yolo, use_stn
     )
     if output_dir is None:
         output_dir = input_dir
@@ -359,7 +347,7 @@ def run_validation(cfg, input_dir, use_yolo=False, use_stn=False, config_path=No
     else:
         logger.info("Validation artifacts will be exported to: %s", output_dir)
 
-    app_model = GaugeAppModel(cfg)
+    app_model = GaugeApp(cfg)
     app_model.load_models(
         textnet_path=cfg.predict.get("model_path", ""),
         stn_path=cfg.data.get("stn_model_path", ""),
@@ -532,18 +520,9 @@ def run_validation(cfg, input_dir, use_yolo=False, use_stn=False, config_path=No
             "accuracy_overall": ocr_accurate_count / total_count if total_count else None,
             "accuracy_on_successful_ocr": ocr_accurate_count / ocr_success_count if ocr_success_count else None,
         },
-        "ratio": {
-            **_make_metric_block(ratio_errors),
-            "skipped_count": ratio_skipped_count,
-        },
-        "reading": {
-            **_make_metric_block(value_errors),
-            "skipped_count": value_skipped_count,
-        },
-        "failures": {
-            "count": len(inference_failures),
-            "samples": inference_failures,
-        },
+        "ratio": {**_make_metric_block(ratio_errors), "skipped_count": ratio_skipped_count},
+        "reading": {**_make_metric_block(value_errors), "skipped_count": value_skipped_count},
+        "failures": {"count": len(inference_failures), "samples": inference_failures},
     }
 
     if output_dir:
@@ -572,14 +551,14 @@ def run_validation(cfg, input_dir, use_yolo=False, use_stn=False, config_path=No
 
 def main():
     args = parse_args()
+    if args.debug:
+        import logging
+
+        logger.console_handler.setLevel(logging.DEBUG)
+        logger.info("Validation console log level set to DEBUG")
     cfg = AttrDict(args.config)
     summary = run_validation(
-        cfg,
-        args.input_dir,
-        use_yolo=args.use_yolo,
-        use_stn=args.use_stn,
-        config_path=args.config,
-        output_dir=args.output_dir,
+        cfg, args.input_dir, use_yolo=args.use_yolo, use_stn=args.use_stn, config_path=args.config, output_dir=args.output_dir
     )
     print(json.dumps(summary, ensure_ascii=False, indent=2))
 

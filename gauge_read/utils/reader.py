@@ -2,7 +2,7 @@ import cv2
 import numpy as np
 import torch
 from skimage import morphology
-
+from ultralytics import YOLO
 from gauge_read.utils.logger import logger
 
 
@@ -39,6 +39,115 @@ class TextDetector(object):
             "aux": aux_map,
         }
         return output
+
+
+class YOLODetector(object):
+    def __init__(self, cfg, weights=None):
+        self.cfg = cfg
+        yolo_cfg = cfg.get("predict", {})
+        self.img_size = int(yolo_cfg.get("yolo_imgsz", 640))
+        self.threshold = float(yolo_cfg.get("yolo_conf", 0.6))
+        self.iou_threshold = float(yolo_cfg.get("yolo_iou", 0.3))
+        self.max_det = int(yolo_cfg.get("yolo_max_det", 160))
+        self.device = yolo_cfg.get("yolo_device", "auto")
+        self.half = yolo_cfg.get("yolo_half", None)
+        self.weights = weights if weights else yolo_cfg.get("yolo_model_path", "pretrain/best.pt")
+        logger.info(
+            "Initializing YOLO Detector: weights=%s, imgsz=%s, conf=%s, iou=%s, max_det=%s, device=%s, half=%s",
+            self.weights,
+            self.img_size,
+            self.threshold,
+            self.iou_threshold,
+            self.max_det,
+            self.device,
+            self.half,
+        )
+        self.init_model()
+
+    def init_model(self):
+        if self.device in (None, "", "auto"):
+            self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+        if self.half is None:
+            # Default to FP16 on CUDA and FP32 on CPU.
+            self.use_half = str(self.device).startswith("cuda")
+        else:
+            self.use_half = bool(self.half)
+
+        self.m = YOLO(self.weights)
+        self.names = self.m.names
+        logger.info("YOLO model loaded successfully: resolved_device=%s, use_half=%s", self.device, self.use_half)
+
+    def _get_label(self, cls_id):
+        if isinstance(self.names, dict):
+            return self.names.get(cls_id, str(cls_id))
+        if isinstance(self.names, (list, tuple)) and 0 <= cls_id < len(self.names):
+            return self.names[cls_id]
+        return str(cls_id)
+
+    def detect(self, im, _):
+        im0 = im.copy()
+        logger.debug("Running YOLO detection on image with shape=%s", im0.shape)
+        results = self.m.predict(
+            source=im0,
+            imgsz=self.img_size,
+            conf=self.threshold,
+            iou=self.iou_threshold,
+            device=self.device,
+            half=self.use_half,
+            max_det=self.max_det,
+            verbose=False,
+        )
+
+        image_info = {}
+        count = 0
+        digital_list, meter_list = [], []
+
+        if not results:
+            logger.warning("YOLO predict returned no results object")
+            return im0, image_info, digital_list, meter_list
+
+        result = results[0]
+        boxes = result.boxes
+        annotated = result.plot()
+
+        if boxes is None or len(boxes) == 0:
+            logger.info("YOLO predict returned zero boxes")
+            return annotated, image_info, digital_list, meter_list
+
+        xyxy = boxes.xyxy.detach().cpu().numpy().astype(np.int32)
+        confs = boxes.conf.detach().cpu().numpy()
+        classes = boxes.cls.detach().cpu().numpy().astype(np.int32)
+        h, w = im0.shape[:2]
+
+        for i in range(len(xyxy)):
+            x1, y1, x2, y2 = xyxy[i].tolist()
+            cls_id = int(classes[i])
+            conf = float(confs[i])
+            lbl = self._get_label(cls_id)
+
+            # Clip coordinates to image bounds to avoid invalid slicing.
+            x1 = max(0, min(x1, w - 1))
+            y1 = max(0, min(y1, h - 1))
+            x2 = max(0, min(x2, w))
+            y2 = max(0, min(y2, h))
+            if x2 <= x1 or y2 <= y1:
+                continue
+
+            region = im0[y1:y2, x1:x2]
+            if lbl == "pointer":
+                meter_list.append(region)
+            else:
+                digital_list.append(region)
+
+            count += 1
+            key = "{}-{:02}".format(lbl, count)
+            image_info[key] = ["{}x{}".format(x2 - x1, y2 - y1), np.round(conf, 3)]
+
+        logger.debug(
+            "YOLO detection finished: meters=%s, digitals=%s, total_regions=%s", len(meter_list), len(digital_list), count
+        )
+        return annotated, image_info, digital_list, meter_list
 
 
 class MeterReader(object):

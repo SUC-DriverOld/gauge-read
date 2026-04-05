@@ -6,6 +6,10 @@ experiment:
   exp_name: multimodal_convnext
   save_dir: logs
 
+stn_experiment:
+  exp_name: stn_convnext
+  save_dir: logs
+
 model:
   net: convnext_tiny
   use_multimodal: true
@@ -49,3 +53,15 @@ training:
   momentum: 0.9
   save_freq: 5
   display_freq: 10
+
+stn_training:
+  seed: 114514
+  epochs: 100
+  batch_size: 16
+  lr: 0.0001
+  lr_min: 0.000001
+  step: 1000
+  test_dir: null
+  disable_homography: false
+  disable_artefacts: false
+  disable_arguments: false

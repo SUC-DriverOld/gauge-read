@@ -12,6 +12,7 @@ import numpy as np
 from PIL import Image
 
 from gauge_read.utils.logger import logger
+from gauge_read.utils.app_logic import GaugeApp
 
 
 IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
@@ -24,9 +25,9 @@ THEME_BORDER_COLOR = "var(--border-color-primary, var(--block-border-color, #d8d
 THEME_ERROR_COLOR = "var(--error-text-color, #d1242f)"
 
 
-class BatchInferenceService:
-    def __init__(self, app_model):
-        self.app_model = app_model
+class BatchInference(GaugeApp):
+    def __init__(self, cfg):
+        super().__init__(cfg)
 
     @staticmethod
     def _format_result_value(value):
@@ -173,7 +174,7 @@ class BatchInferenceService:
         return annotated
 
     def process_directory(self, input_dir, use_stn=True, use_yolo=False, progress=None):
-        if self.app_model.textnet is None:
+        if self.textnet is None:
             return f"<div style='padding:12px;color:{THEME_ERROR_COLOR};'>模型未加载</div>", None, None
 
         if progress is not None:
@@ -214,8 +215,8 @@ class BatchInferenceService:
             try:
                 with Image.open(image_path) as pil_image:
                     rgb_image = pil_image.convert("RGB")
-                    vis_img, reading, start_val, end_val = self.app_model.process_image(rgb_image, use_stn, use_yolo)
-                ratio = self.app_model.current_ratio
+                    vis_img, reading, start_val, end_val = self.process_image(rgb_image, use_stn, use_yolo)
+                ratio = self.current_ratio
                 result_image = self._annotate_result_image(
                     vis_img if vis_img is not None else np.array(rgb_image), ratio=ratio, reading=reading
                 )

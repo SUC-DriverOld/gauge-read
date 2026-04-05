@@ -1,5 +1,4 @@
 import os
-import sys
 import gc
 import time
 import argparse
@@ -11,11 +10,6 @@ import torch.utils.data as data
 from torch.optim import lr_scheduler
 from tensorboardX import SummaryWriter
 from tqdm import tqdm
-
-if __package__ is None or __package__ == "":
-    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    if repo_root not in sys.path:
-        sys.path.insert(0, repo_root)
 
 from gauge_read.datasets import MeterDataset
 from gauge_read.models.loss import TextLoss

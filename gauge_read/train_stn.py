@@ -1,8 +1,10 @@
 import os
 import argparse
+import random
 
 import torch
 import torch.optim as optim
+import numpy as np
 from torch.optim.lr_scheduler import CosineAnnealingLR
 from tqdm import tqdm
 from tensorboardX import SummaryWriter
@@ -12,41 +14,73 @@ from gauge_read.utils.tools import warp, warp_points, draw_points_on_batch
 from gauge_read.datasets.meter_data import MeterSyn, STNTest
 from gauge_read.models.stn import STNModel
 from gauge_read.models.loss import STNLoss
+from gauge_read.utils.config import AttrDict
 from gauge_read.utils.logger import logger
 
 
-def train(args):
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    writer = SummaryWriter(logdir=f"logs/{args.exp_name}")
-    logger.info("Starting STN training: exp_name=%s, device=%s", args.exp_name, device)
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train STN model")
+    parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
+    return parser.parse_args()
+
+
+def train(cfg):
+    device = cfg.system.device
+    exp_name = cfg.stn_experiment.exp_name
+    save_dir = cfg.stn_experiment.save_dir
+    log_dir = os.path.join(save_dir, exp_name)
+    os.makedirs(log_dir, exist_ok=True)
+    writer = SummaryWriter(logdir=log_dir)
+    logger.info("Starting STN training: exp_name=%s, device=%s", exp_name, device)
 
     trn_dataset = MeterSyn(
-        size=args.step * args.batch_size,
-        use_homography=(not args.disable_homography),
-        use_artefacts=(not args.disable_artefacts),
-        use_arguments=(not args.disable_arguments),
+        size=cfg.stn_training.step * cfg.stn_training.batch_size,
+        use_homography=(not cfg.stn_training.disable_homography),
+        use_artefacts=(not cfg.stn_training.disable_artefacts),
+        use_arguments=(not cfg.stn_training.disable_arguments),
     )
-    trn_loader = DataLoader(trn_dataset, batch_size=args.batch_size, shuffle=True)
-    logger.info("STN training dataset loaded: size=%s, batch_size=%s", len(trn_dataset), args.batch_size)
+    trn_loader = DataLoader(
+        trn_dataset,
+        batch_size=cfg.stn_training.batch_size,
+        shuffle=True,
+        num_workers=cfg.system.num_workers,
+        pin_memory=cfg.system.device.type == "cuda",
+    )
+    logger.info(
+        "STN training dataset loaded: size=%s, batch_size=%s, num_workers=%s",
+        len(trn_dataset),
+        cfg.stn_training.batch_size,
+        cfg.system.num_workers,
+    )
 
     test_loader = None
-    if args.test_dir and os.path.exists(args.test_dir):
-        test_dataset = STNTest(args.test_dir)
-        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False)
-        logger.info("STN validation dataset loaded from %s, size=%s", args.test_dir, len(test_dataset))
-    elif args.test_dir:
-        logger.warning("STN validation directory not found: %s", args.test_dir)
+    test_dir = cfg.stn_training.get("test_dir")
+    if test_dir and os.path.exists(test_dir):
+        test_dataset = STNTest(test_dir)
+        test_loader = DataLoader(
+            test_dataset,
+            batch_size=cfg.stn_training.batch_size,
+            shuffle=False,
+            num_workers=cfg.system.num_workers,
+            pin_memory=cfg.system.device.type == "cuda",
+        )
+        logger.info("STN validation dataset loaded from %s, size=%s", test_dir, len(test_dataset))
+    elif test_dir:
+        logger.warning("STN validation directory not found: %s", test_dir)
 
     model_stn = STNModel(pretrained=True).to(device)
-    optimizer = optim.AdamW(model_stn.parameters(), lr=args.lr)
-    scheduler = CosineAnnealingLR(optimizer, T_max=max(1, args.epochs * len(trn_loader)), eta_min=args.lr_min)
+    optimizer = optim.AdamW(model_stn.parameters(), lr=cfg.stn_training.lr)
+    scheduler = CosineAnnealingLR(
+        optimizer, T_max=max(1, cfg.stn_training.epochs * len(trn_loader)), eta_min=cfg.stn_training.lr_min
+    )
     criterion = STNLoss()
     logger.info("STN model, optimizer, scheduler, and criterion initialized")
 
     total_loss = 0.0
     best_loss = float("inf")
-    for ep in range(args.epochs):
-        logger.info("Starting STN epoch %s/%s", ep + 1, args.epochs)
+    for ep in range(cfg.stn_training.epochs):
+        logger.info("Starting STN epoch %s/%s", ep + 1, cfg.stn_training.epochs)
         train_pbar = tqdm(trn_loader, total=len(trn_loader), desc=f"Train Epoch {ep}", leave=False)
         for i, (img, Minv, center) in enumerate(train_pbar):
             model_stn.train()
@@ -141,31 +175,32 @@ def train(args):
         logger.info("Finished STN epoch %s: avg_loss=%.6f, best_loss=%.6f", ep, ep_loss, best_loss)
         if ep_loss < best_loss:
             best_loss = ep_loss
-            save_path = f"logs/{args.exp_name}/ep{ep}_loss{ep_loss:.4f}.pth"
+            save_path = os.path.join(save_dir, exp_name, f"ep{ep}_loss{ep_loss:.4f}.pth")
             torch.save(model_stn.state_dict(), save_path)
             logger.info("Saved new best STN checkpoint to %s", save_path)
 
+    writer.close()
     logger.info("STN training finished: best_loss=%.6f", best_loss)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--exp_name", type=str, default="stn_convnext")
-    parser.add_argument("--epochs", type=int, default=100)
-    parser.add_argument("--batch_size", type=int, default=16)
-    parser.add_argument("--lr", type=float, default=1e-4)
-    parser.add_argument("--lr_min", type=float, default=1e-6)
-    parser.add_argument("--step", type=int, default=1000)
-    parser.add_argument("--test_dir", type=str, default=None)
-    parser.add_argument("--disable_homography", action="store_true")
-    parser.add_argument("--disable_artefacts", action="store_true")
-    parser.add_argument("--disable_arguments", action="store_true")
-    parser.add_argument("-d", "--debug", action="store_true")
-    args = parser.parse_args()
+    args = parse_args()
     if args.debug:
         import logging
 
         logger.console_handler.setLevel(logging.DEBUG)
-        logger.info("WebUI console log level set to DEBUG")
-    logger.info("Launching train_stn.py with args=%s", args)
-    train(args)
+        logger.info("train_stn console log level set to DEBUG")
+
+    cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
+    logger.info("Launching train_stn.py with config=%s", args.config or AttrDict.DEFAULT_CONFIG_PATH)
+
+    seed = int(cfg.stn_training.get("seed", cfg.training.get("seed", 114514)))
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(seed)
+    logger.info("STN training random seeds initialized to %s", seed)
+
+    cfg.print_config()
+    train(cfg)

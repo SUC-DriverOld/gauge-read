@@ -1,5 +1,4 @@
 import os
-import sys
 import argparse
 import threading
 from typing import Optional
@@ -9,25 +8,19 @@ import uvicorn
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 
-# Ensure project root is in path
-current_dir = os.path.dirname(os.path.abspath(__file__))
-package_root = os.path.dirname(current_dir)
-repo_root = os.path.dirname(package_root)
-if repo_root not in sys.path:
-    sys.path.append(repo_root)
-
-from gauge_read.webui.app_logic import GaugeAppModel
+from gauge_read.utils.app_logic import GaugeApp
 from gauge_read.utils.config import AttrDict
 from gauge_read.utils.logger import logger
 
 app = FastAPI(title="Gauge Reader API")
 _infer_lock = threading.Lock()
-_app_logic: Optional[GaugeAppModel] = None
+_app_logic: Optional[GaugeApp] = None
 _cfg: Optional[AttrDict] = None
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description="Gauge Reader API")
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("-c", "--config", type=str, default=None, help="Path to config YAML")
     parser.add_argument("--yolo", type=str, default=None, help="Path to YOLO weights")
     parser.add_argument("--stn", type=str, default=None, help="Path to STN weights")
@@ -58,7 +51,7 @@ def init_app_logic(yolo_path=None, stn_path=None, textnet_path=None):
     yolo, stn, textnet = _resolve_model_paths(cfg, yolo_path, stn_path, textnet_path)
 
     logger.info("Initializing Gauge Model for API: textnet=%s, stn=%s, yolo=%s", textnet, stn or "disabled", yolo)
-    _app_logic = GaugeAppModel(cfg)
+    _app_logic = GaugeApp(cfg)
     _app_logic.load_models(textnet_path=textnet, stn_path=stn, yolo_path=yolo)
     logger.info("Gauge API model initialization completed")
 
@@ -121,7 +114,7 @@ def predict(req: GaugeRequest):
     # It resets start=0 and end=OCR.
     # We run inference first to get OCR result (if needed) and std points.
 
-    # GaugeAppModel contains mutable current_* state, so use a lock to avoid cross-request contamination.
+    # GaugeApp contains mutable current_* state, so use a lock to avoid cross-request contamination.
     with _infer_lock:
         logger.debug("API inference lock acquired")
         vis_img, val, auto_start, auto_end = _app_logic.process_image(image, use_stn=req.use_stn, use_yolo=req.use_yolo)
@@ -167,6 +160,11 @@ def predict(req: GaugeRequest):
 
 if __name__ == "__main__":
     args = parse_args()
+    if args.debug:
+        import logging
+
+        logger.console_handler.setLevel(logging.DEBUG)
+        logger.info("API console log level set to DEBUG")
     _cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
     logger.info(
         "Starting Gauge Reader API: host=%s, port=%s, config=%s",

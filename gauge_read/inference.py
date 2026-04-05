@@ -1,275 +1,170 @@
-import argparse
 import os
-
+import sys
+import argparse
+import json
 import cv2
-import numpy as np
-import torch
-from ultralytics import YOLO
 
-from gauge_read.models.textnet import TextNet
-from gauge_read.utils.stn_transform import STNTransformer
-from gauge_read.utils.augmentation import BaseTransform
+from gauge_read.utils.app_logic import GaugeApp
 from gauge_read.utils.config import AttrDict
-from gauge_read.utils.converter import StringLabelConverter
 from gauge_read.utils.logger import logger
-from gauge_read.utils.tools import to_device
-from gauge_read.utils.reader import MeterReader, TextDetector
 
 
-class Detector(object):
-    def __init__(self, cfg, weights=None):
-        self.cfg = cfg
-        yolo_cfg = cfg.get("predict", {})
-        self.img_size = int(yolo_cfg.get("yolo_imgsz", 640))
-        self.threshold = float(yolo_cfg.get("yolo_conf", 0.6))
-        self.iou_threshold = float(yolo_cfg.get("yolo_iou", 0.3))
-        self.max_det = int(yolo_cfg.get("yolo_max_det", 160))
-        self.device = yolo_cfg.get("yolo_device", "auto")
-        self.half = yolo_cfg.get("yolo_half", None)
-        self.weights = weights if weights else yolo_cfg.get("yolo_model_path", "pretrain/best.pt")
-        logger.info(
-            "Initializing YOLO Detector: weights=%s, imgsz=%s, conf=%s, iou=%s, max_det=%s, device=%s, half=%s",
-            self.weights,
-            self.img_size,
-            self.threshold,
-            self.iou_threshold,
-            self.max_det,
-            self.device,
-            self.half,
-        )
-        self.init_model()
-
-    def init_model(self):
-        if self.device in (None, "", "auto"):
-            self.device = "cuda:0" if torch.cuda.is_available() else "cpu"
-
-        if self.half is None:
-            # Default to FP16 on CUDA and FP32 on CPU.
-            self.use_half = str(self.device).startswith("cuda")
-        else:
-            self.use_half = bool(self.half)
-
-        self.m = YOLO(self.weights)
-        self.names = self.m.names
-        logger.info("YOLO model loaded successfully: resolved_device=%s, use_half=%s", self.device, self.use_half)
-
-    def _get_label(self, cls_id):
-        if isinstance(self.names, dict):
-            return self.names.get(cls_id, str(cls_id))
-        if isinstance(self.names, (list, tuple)) and 0 <= cls_id < len(self.names):
-            return self.names[cls_id]
-        return str(cls_id)
-
-    def detect(self, im, _):
-        im0 = im.copy()
-        logger.debug("Running YOLO detection on image with shape=%s", im0.shape)
-        results = self.m.predict(
-            source=im0,
-            imgsz=self.img_size,
-            conf=self.threshold,
-            iou=self.iou_threshold,
-            device=self.device,
-            half=self.use_half,
-            max_det=self.max_det,
-            verbose=False,
-        )
-
-        image_info = {}
-        count = 0
-        digital_list, meter_list = [], []
-
-        if not results:
-            logger.warning("YOLO predict returned no results object")
-            return im0, image_info, digital_list, meter_list
-
-        result = results[0]
-        boxes = result.boxes
-        annotated = result.plot()
-
-        if boxes is None or len(boxes) == 0:
-            logger.info("YOLO predict returned zero boxes")
-            return annotated, image_info, digital_list, meter_list
-
-        xyxy = boxes.xyxy.detach().cpu().numpy().astype(np.int32)
-        confs = boxes.conf.detach().cpu().numpy()
-        classes = boxes.cls.detach().cpu().numpy().astype(np.int32)
-        h, w = im0.shape[:2]
-
-        for i in range(len(xyxy)):
-            x1, y1, x2, y2 = xyxy[i].tolist()
-            cls_id = int(classes[i])
-            conf = float(confs[i])
-            lbl = self._get_label(cls_id)
-
-            # Clip coordinates to image bounds to avoid invalid slicing.
-            x1 = max(0, min(x1, w - 1))
-            y1 = max(0, min(y1, h - 1))
-            x2 = max(0, min(x2, w))
-            y2 = max(0, min(y2, h))
-            if x2 <= x1 or y2 <= y1:
-                continue
-
-            region = im0[y1:y2, x1:x2]
-            if lbl == "pointer":
-                meter_list.append(region)
-            else:
-                digital_list.append(region)
-
-            count += 1
-            key = "{}-{:02}".format(lbl, count)
-            image_info[key] = ["{}x{}".format(x2 - x1, y2 - y1), np.round(conf, 3)]
-
-        logger.debug(
-            "YOLO detection finished: meters=%s, digitals=%s, total_regions=%s", len(meter_list), len(digital_list), count
-        )
-        return annotated, image_info, digital_list, meter_list
+def emit_json(payload, exit_code=0):
+    print(json.dumps(payload, indent=2))
+    if exit_code:
+        sys.exit(exit_code)
 
 
-def main(args, cfg):
-    stn_transformer = None
-    if cfg.predict.get("use_stn", False):
-        stn_model_path = cfg.data.get("stn_model_path", "")
-        logger.info("Initializing STN for inference from %s", stn_model_path)
-        stn_transformer = STNTransformer(stn_model_path, device=cfg.system.device)
-
-    predict_dir = args.data_dir or cfg.predict.get("data_dir", "datas/demo")
-    logger.info("Starting offline inference: predict_dir=%s", predict_dir)
-
-    if not os.path.isdir(predict_dir):
-        logger.error("Predict directory not found: %s", predict_dir)
-        raise NotADirectoryError(f"Predict directory not found: {predict_dir}")
-
-    model = TextNet(is_training=False, backbone=cfg.model.net, cfg=cfg)
-    model_path = cfg.predict.model_path
-    if not os.path.exists(model_path):
-        logger.error("Inference model checkpoint not found: %s", model_path)
-        raise FileNotFoundError(
-            f"Model checkpoint not found: {model_path}. "
-            "Please update `predict.model_path` in gauge_read/configs/config.yaml or provide a valid config file."
-        )
-    state_dict = torch.load(model_path)
-    model.load_state_dict(state_dict["model"])
-    model = model.to(cfg.system.device)
-    logger.info("Inference TextNet loaded and moved to device=%s", cfg.system.device)
-    converter = StringLabelConverter()
-
-    det = Detector(cfg=cfg)
-    detector = TextDetector(model)
-    meter = MeterReader(debug=True)
-    transform = BaseTransform(size=cfg.data.test_size, mean=cfg.model.means, std=cfg.model.stds)
-
-    image_list = os.listdir(predict_dir)
-    logger.info("Found %s files in predict directory", len(image_list))
-    for index in image_list:
-        logger.info("Processing inference image: %s", index)
-        image_path = os.path.join(predict_dir, index)
-        image = cv2.imread(image_path)
-
-        if image is None:
-            logger.warning("Failed to load image from %s; skipping", image_path)
-            continue
-
-        cv2.imshow("det1", image)
-        cv2.waitKey(0)
-
-        if cfg.predict.get("use_yolo", False):
-            _, _, _, meter_list = det.detect(image, index)
-        else:
-            meter_list = [image]
-
-        if len(meter_list) == 0:
-            logger.warning("No meter detected for image %s", index)
-            continue
-
-        logger.info("Inference image %s yielded %s meter candidates", index, len(meter_list))
-
-        for meter_img in meter_list:
-            predicted_center = None
-            if stn_transformer is not None:
-                meter_img, _, predicted_center = stn_transformer(meter_img, None)
-                logger.debug("STN processed meter candidate, predicted_center=%s", predicted_center)
-
-            cv2.imshow("det", meter_img)
-            cv2.waitKey(0)
-
-            norm_img, _ = transform(meter_img)
-            norm_img = norm_img.transpose(2, 0, 1)
-            norm_img = torch.from_numpy(norm_img).unsqueeze(0)
-            norm_img = to_device(norm_img, device=cfg.system.device)
-            try:
-                output = detector.detect1(norm_img)
-            except Exception as _:
-                logger.exception("Detection error during offline inference for image %s", index)
-                continue
-
-            pointer_pred, dail_pred, text_pred, preds, std_points, aux_map = (
-                output["pointer"],
-                output["dail"],
-                output["text"],
-                output["reco"],
-                output["std"],
-                output["aux"],
-            )
-
-            if aux_map is not None:
-                cv2.imshow("aux_blackhat", aux_map)
-
-            pred, preds_size = preds
-            if pred is not None:
-                _, pred = pred.max(2)
-                pred = pred.transpose(1, 0).contiguous().view(-1)
-                pred_transcripts = converter.decode(pred.data, preds_size.data, raw=False)
-                pred_transcripts = [pred_transcripts] if isinstance(pred_transcripts, str) else pred_transcripts
-            else:
-                pred_transcripts = None
-
-            logger.info(
-                "Offline inference result for %s: has_pointer=%s, has_text=%s, has_std_points=%s, transcript=%s",
-                index,
-                pointer_pred is not None,
-                text_pred is not None,
-                std_points is not None,
-                pred_transcripts,
-            )
-
-            img_show = norm_img[0].permute(1, 2, 0).cpu().numpy()
-            img_show = ((img_show * np.array(cfg.model.stds) + np.array(cfg.model.means)) * 255).astype(np.uint8)
-
-            meter(
-                img_show,
-                pointer_pred,
-                dail_pred,
-                text_pred,
-                pred_transcripts,
-                std_points,
-                getattr(stn_transformer, "last_center", predicted_center),
-            )
-
-    logger.info("Offline inference finished for directory %s", predict_dir)
+def emit_json_error(message, exit_code=1):
+    emit_json({"status": "error", "message": message}, exit_code=exit_code)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Gauge inference")
-    parser.add_argument(
-        "-c", "--config", type=str, default=None, help="Path to YAML config file. If omitted, default config is used."
-    )
-    parser.add_argument(
-        "-d",
-        "--data-dir",
-        type=str,
-        default=None,
-        help="Directory containing images to predict. Overrides config/default path.",
-    )
-    parser.add_argument("--debug", action="store_true", help="Enable debug logging")
+def main():
+    parser = argparse.ArgumentParser(description="Gauge Reader CLI")
+
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
+
+    parser.add_argument("-c", "--config", type=str, default=None, help="Path to config YAML")
+
+    # Inputs
+    parser.add_argument("image_path", type=str, help="Path to the gauge image")
+
+    # Model Paths
+    parser.add_argument("--yolo", type=str, default=None, help="Path to YOLO weights")
+    parser.add_argument("--stn", type=str, default=None, help="Path to STN weights")
+    parser.add_argument("--textnet", type=str, default=None, help="Path to TextNet weights")
+
+    # Flags
+    parser.add_argument("--use-yolo", action="store_true", help="Enable YOLO detection")
+    parser.add_argument("--use-stn", action="store_true", help="Enable STN correction")
+
+    # Overrides
+    parser.add_argument("--start-value", type=float, default=None, help="Override start scale value")
+    parser.add_argument("--end-value", type=float, default=None, help="Override end scale value")
+
+    # Output
+    parser.add_argument("--output", type=str, default=None, help="Path to save result image (optional)")
+
     args = parser.parse_args()
+
     if args.debug:
         import logging
 
         logger.console_handler.setLevel(logging.DEBUG)
-        logger.info("WebUI console log level set to DEBUG")
+        logger.info("CLI console log level set to DEBUG")
+
+    logger.info("CLI invocation started")
+    logger.debug(
+        "CLI arguments parsed: image_path=%s, config=%s, use_yolo=%s, use_stn=%s, output=%s, start_override=%s, end_override=%s",
+        args.image_path,
+        args.config or AttrDict.DEFAULT_CONFIG_PATH,
+        args.use_yolo,
+        args.use_stn,
+        args.output,
+        args.start_value,
+        args.end_value,
+    )
 
     cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
-    logger.info("Launching offline inference with config=%s", args.config or AttrDict.DEFAULT_CONFIG_PATH)
-    cfg.print_config()
+    logger.info("Configuration loaded for CLI: %s", args.config or AttrDict.DEFAULT_CONFIG_PATH)
 
-    main(args, cfg)
+    yolo_path = args.yolo or cfg.predict.get("yolo_model_path", "pretrain/best.pt")
+    stn_path = args.stn if args.stn is not None else cfg.data.get("stn_model_path", "")
+    textnet_path = args.textnet or cfg.predict.get("model_path", "")
+    logger.info("Resolved model paths for CLI: textnet=%s, stn=%s, yolo=%s", textnet_path, stn_path or "disabled", yolo_path)
+
+    # Validate Image
+    if not os.path.exists(args.image_path):
+        logger.error("CLI input image does not exist: %s", args.image_path)
+        emit_json_error(f"Image not found: {args.image_path}")
+
+    image = cv2.imread(args.image_path)
+    if image is None:
+        logger.error("CLI failed to read image structure from path: %s", args.image_path)
+        emit_json_error("Failed to read image structure")
+
+    logger.info("CLI input image loaded successfully: %s", args.image_path)
+    logger.debug("CLI input image shape: %s", image.shape)
+
+    # Initialize Model
+    # Note: GaugeApp assumes 'cfg' which loads config.
+    # Since we are in scripts/, ensure config works.
+    # Usually config.py uses relative paths or is loaded once.
+
+    try:
+        logger.info("Initializing GaugeApp for CLI inference")
+        app_logic = GaugeApp(cfg)
+        app_logic.load_models(textnet_path=textnet_path, stn_path=stn_path, yolo_path=yolo_path)
+    except Exception as e:
+        logger.exception("CLI model initialization failed")
+        emit_json_error(f"Model initialization failed: {str(e)}")
+
+    # Process
+    try:
+        logger.info("Starting CLI inference: use_stn=%s, use_yolo=%s", args.use_stn, args.use_yolo)
+        vis_img, val, start_val, end_val = app_logic.process_image(image, use_stn=args.use_stn, use_yolo=args.use_yolo)
+        logger.debug("Initial CLI inference output: value=%s, start=%s, end=%s", val, start_val, end_val)
+
+        if val is None:
+            logger.error("CLI inference returned no value: %s", vis_img)
+            emit_json_error(f"Inference failed: {vis_img}")
+
+        # Overrides
+        need_recalc = False
+        if args.start_value is not None:
+            app_logic.current_start_value = args.start_value
+            need_recalc = True
+            logger.info("Applied CLI start value override: %s", args.start_value)
+
+        if args.end_value is not None:
+            app_logic.current_end_value = args.end_value
+            need_recalc = True
+            logger.info("Applied CLI end value override: %s", args.end_value)
+
+        final_val = val
+        if need_recalc:
+            logger.info("Recalculating CLI result after manual overrides")
+            final_val = app_logic.recalculate()
+
+        final_ratio = getattr(app_logic, "current_ratio", 0.0)
+        logger.info(
+            "CLI inference completed successfully: measure_value=%s, ratio=%s, start_value=%s, end_value=%s",
+            final_val,
+            final_ratio,
+            app_logic.current_start_value,
+            app_logic.current_end_value,
+        )
+
+        # Save output image if requested
+        if args.output:
+            # app_logic.draw_visualization() uses current state
+            # update_point uses draw_visualization internally
+            # process_image returns display_img (RGB from app_logic)
+            # But we might have recalculated.
+            # Let's force a redraw.
+            vis_res = app_logic.draw_visualization()
+            save_ok = cv2.imwrite(args.output, cv2.cvtColor(vis_res, cv2.COLOR_RGB2BGR))
+            if save_ok:
+                logger.info("CLI result image saved to %s", args.output)
+            else:
+                logger.error("CLI failed to save result image to %s", args.output)
+                emit_json_error(f"Failed to save output image: {args.output}")
+
+        # Result
+        result = {
+            "status": "success",
+            "measure_value": final_val,
+            "ratio": final_ratio,
+            "start_value": app_logic.current_start_value,
+            "end_value": app_logic.current_end_value,
+        }
+
+        emit_json(result)
+
+    except Exception as e:
+        logger.exception("CLI processing failed")
+        emit_json_error(f"Processing error: {str(e)}")
+
+
+if __name__ == "__main__":
+    main()

@@ -1,22 +1,16 @@
 import os
 import socket
-import sys
 import warnings
 import argparse
 import webview
 from tkinter import messagebox
-
-current_dir = os.path.dirname(os.path.abspath(__file__))
-package_root = os.path.dirname(current_dir)
-repo_root = os.path.dirname(package_root)
-if repo_root not in sys.path:
-    sys.path.append(repo_root)
 
 from gauge_read.utils.logger import logger
 
 gradio_app = None
 os.environ["no_proxy"] = "localhost,127.0.0.1,::1"
 warnings.filterwarnings("ignore")
+index_path = os.path.join(os.path.dirname(__file__), "index.html")
 
 
 def find_free_port(ip, start_port=11451, end_port=19198):
@@ -39,12 +33,12 @@ def start_gradio(server_name, server_port, config_path=None):
         os.environ["GAUGE_CONFIG"] = config_path
         logger.info("Desktop GUI set GAUGE_CONFIG=%s", config_path)
 
-    from gauge_read.webui import app
+    from gauge_read.webui import webui
 
-    app.cfg.print_config()
+    webui.cfg.print_config()
 
     global gradio_app
-    gradio_app = app
+    gradio_app = webui
 
     logger.info("Desktop GUI launching embedded WebUI on %s:%s", server_name, server_port)
     gradio_app.demo.launch(
@@ -70,7 +64,7 @@ def main():
     try:
         webview.create_window(
             title="模拟仪表读数系统",
-            url=f"index.html?ip={server_name}&port={server_port}",
+            url=f"{index_path}?ip={server_name}&port={server_port}",
             width=1600,
             height=900,
             frameless=False,
