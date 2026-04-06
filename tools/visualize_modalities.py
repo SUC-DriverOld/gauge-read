@@ -26,9 +26,8 @@ def get_saliency_modality(img):
 
 
 def main():
-    # 默认图片路径，你可以修改为你自己的图片
-    image_dir = r"e:\vs\gauge-read\datas\demo"
-    output_dir = r"e:\vs\gauge-read"
+    image_dir = r"datas\test"
+    output_dir = r"datas"
 
     # 获取目录下的第一张 jpg 图片
     if not os.path.exists(image_dir):
@@ -40,7 +39,7 @@ def main():
         print(f"在 {image_dir} 中没有找到图片")
         return
 
-    image_path = os.path.join(image_dir, files[1])
+    image_path = os.path.join(image_dir, files[0])
     print(f"正在处理图片: {image_path}")
 
     # 读取图片

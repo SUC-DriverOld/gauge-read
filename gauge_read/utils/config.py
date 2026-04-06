@@ -1,13 +1,8 @@
 import os
-import torch
 import yaml
 
 
 class AttrDict(dict):
-    """A dictionary with attribute-style access. It maps attribute access to
-    the real dictionary.
-    """
-
     DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs", "config.yaml")
 
     def __init__(self, *args, **kwargs):
@@ -27,8 +22,6 @@ class AttrDict(dict):
 
         for k, v in kwargs.items():
             self[k] = self._to_attr_dict(v)
-
-        self._set_runtime_fields()
 
     @staticmethod
     def _load_yaml(config_path):
@@ -53,13 +46,6 @@ class AttrDict(dict):
         if isinstance(value, list):
             return [cls._to_attr_dict(v) for v in value]
         return value
-
-    def _set_runtime_fields(self):
-        system_cfg = self.get("system")
-        if not isinstance(system_cfg, dict):
-            return
-        cuda_enabled = bool(system_cfg.get("cuda", False)) and torch.cuda.is_available()
-        system_cfg["device"] = torch.device("cuda") if cuda_enabled else torch.device("cpu")
 
     def __getstate__(self):
         return self.__dict__.items()

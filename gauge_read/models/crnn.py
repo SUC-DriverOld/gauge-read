@@ -25,35 +25,38 @@ class CRNN(nn.Module):
         super(CRNN, self).__init__()
         assert imgH % 16 == 0, "imgH has to be a multiple of 16"
 
+        def activation():
+            return nn.LeakyReLU(0.2, inplace=True) if leakyRelu else nn.ReLU(True)
+
         cnn = nn.Sequential()
 
-        conv_specs = [
-            # (out_channels, kernel_size, stride, padding, use_batchnorm)
-            (64, 3, 1, 1, False),
-            (128, 3, 1, 1, False),
-            (256, 3, 1, 1, True),
-            (256, 3, 1, 1, False),
-            (512, 3, 1, 1, True),
-            (512, 3, 1, 1, False),
-            (512, 2, 1, 0, True),
-        ]
+        cnn.add_module("conv0", nn.Conv2d(nc, 64, 3, 1, 1))
+        cnn.add_module("relu0", activation())
+        cnn.add_module("pooling0", nn.MaxPool2d(2, 2, 0))
 
-        pool_specs = {0: (2, 2, 0), 1: (2, 2, 0), 3: ((2, 2), (2, 1), (0, 1)), 5: ((2, 2), (2, 1), (0, 1))}
+        cnn.add_module("conv1", nn.Conv2d(64, 128, 3, 1, 1))
+        cnn.add_module("relu1", activation())
+        cnn.add_module("pooling1", nn.MaxPool2d(2, 2, 0))
 
-        for i, (n_out, k, s, p, use_bn) in enumerate(conv_specs):
-            n_in = nc if i == 0 else conv_specs[i - 1][0]
-            cnn.add_module(f"conv{i}", nn.Conv2d(n_in, n_out, k, s, p))
-            if use_bn:
-                cnn.add_module(f"batchnorm{i}", nn.BatchNorm2d(n_out))
-            if leakyRelu:
-                cnn.add_module(f"relu{i}", nn.LeakyReLU(0.2, inplace=True))
-            else:
-                cnn.add_module(f"relu{i}", nn.ReLU(True))
+        cnn.add_module("conv2", nn.Conv2d(128, 256, 3, 1, 1))
+        cnn.add_module("batchnorm2", nn.BatchNorm2d(256))
+        cnn.add_module("relu2", activation())
 
-            if i in pool_specs:
-                k_pool, s_pool, p_pool = pool_specs[i]
-                pool_idx = list(pool_specs.keys()).index(i)
-                cnn.add_module(f"pooling{pool_idx}", nn.MaxPool2d(k_pool, s_pool, p_pool))
+        cnn.add_module("conv3", nn.Conv2d(256, 256, 3, 1, 1))
+        cnn.add_module("relu3", activation())
+        cnn.add_module("pooling2", nn.MaxPool2d((2, 2), (2, 1), (0, 1)))
+
+        cnn.add_module("conv4", nn.Conv2d(256, 512, 3, 1, 1))
+        cnn.add_module("batchnorm4", nn.BatchNorm2d(512))
+        cnn.add_module("relu4", activation())
+
+        cnn.add_module("conv5", nn.Conv2d(512, 512, 3, 1, 1))
+        cnn.add_module("relu5", activation())
+        cnn.add_module("pooling3", nn.MaxPool2d((2, 2), (2, 1), (0, 1)))
+
+        cnn.add_module("conv6", nn.Conv2d(512, 512, 2, 1, 0))
+        cnn.add_module("batchnorm6", nn.BatchNorm2d(512))
+        cnn.add_module("relu6", activation())
 
         self.cnn = cnn
         self.rnn = nn.Sequential(BidirectionalLSTM(512, nh, nh), BidirectionalLSTM(nh, nh, nclass))

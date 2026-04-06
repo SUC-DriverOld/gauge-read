@@ -1,78 +1,105 @@
-# Detect and Read meters in the wild
-This is areleased system towards detection and recognition of complex meters in wild. The system can be divided into three moduels. Fisrtly, a yolo-based detector is applied to get pure meter region. Secondly, a spatial transformer module is eatablished to rectify the position of meter. Lastly, an end-to-end network is to read meter values, which is implemented by pointer/dail predcition and key number learning.    
-
-## Visulization results
-![](1.png)
-![](2.png)
-
-Left row is the original image, middle row is the process of meter rectification, right row is the result of meter value reading.
-
-
-
-## ToDo List
-
-- [x] Release testing code
-- [x] Release training code and dataset
-- [x] existing three-stage models
-- [ ] A new branch for digital-meter recognition
-- [x] Document for testing
-- [x] Document for training
-- [x] Demo script for single image
+# Gauge Read
 
 
 ## Installation
 
-### Requirements:
-- Python3 (Python3.7 is recommended)
-- PyTorch >= 1.0 
-- torchvision from master
-- numpy
-- skimage
-- OpenCV==3.0.x
-- CUDA >= 9.0 (10.0 is recommended)
+- Install uv. Use the following command to install uv, or use `pip install uv` if you have pip installed.
 
-## Meter Detection 
-We use official YOLO-V5 to detect meters.
+    ```bash
+    # Windows
+    powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
+    # Linux & MacOS
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
 
-We release a dataset for training model, which can be downloaded from [data_detection]( https://drive.google.com/file/d/1RKcqJ0RWaBPpBbMtWwcgQ4S66Iwf97RS/view?usp=drive_link) The data is COCO-format and label 0 and 1 represent pointer meters and digital meters.
+- Clone the repository and install the dependencies.
 
-We also provide trained weight in [yolo_weight](https://drive.google.com/file/d/1bHYpJro3ERmNTRO2JEo1inyU0_juqw5z/view?usp=drive_link) You dan put it in the yolov5 folder for inference.
+    ```bash
+    git clone https://github.com/SUC-DriverOld/gauge-read.git
+    cd gauge-read
+    uv sync
+    ```
 
-## Meter Alignment
-We implement meter alignment by STN network. However, we obseve it is time-consuming. Thus we remove it in the latest version. You can still find it in the master branch. We also provide the weight you can refer in [alignment weight](https://drive.google.com/file/d/1406CI_GqRBpXn1-AChM6NzdX8r9FAXl-/view?usp=sharing)
+- Download the pretrained models from the [release page](https://github.com/SUC-DriverOld/gauge-read/releases/tag/weights) and place them in the `pretrain` directory (mkdir if not exists) as follows:
 
-## Meter Recognition
-We design a network for read meters, which consists of a pointer prediction head, dail prediction head, and a ocr-based value prediction head. By a post-processing method, meter readings can be obtained.
+    ```
+    gauge-read/pretrain
+        ├─meter
+        │   └── meter_convnext_tiny_ep100.pth
+        ├─stn
+        │   └── stn_ep35_loss0.0551.pth
+        └─yolo
+            └── yolo26_best.pt
+    ```
 
-The dataset for training the network has been realsed in [data](https://drive.google.com/file/d/1fFSSwoWAHkZWqgVCuqwOSFjSVfkjGk2U/view?usp=drive_link) the data is annotated by Labelme tool. "Train" folder contains pointer and dail information, and "Train1" folder contains value information. 
+- Use `gaugeread` command to run the project. Use `gaugeread -h` to see the available subcommands and options.
 
-You can run ```python viz_label.py``` to visualize different annotations.
+    ```bash
+    usage: gaugeread <subcommand> [options]
 
-![](3.png)
+    Gauge Read unified command line entrypoint
 
-You can run ```python train.py``` to train your own dataset. The training configurations are in ```util/option.py```
+    positional arguments:
+    {api,train,train-stn,valid,infer,webui,gui}
 
-We also provide trained weight in [read_weight](https://drive.google.com/file/d/1sHmEEf9E0_kvL0LW1S5Y5jjFgjx_O5Dj/view?usp=drive_link) You should put it in the ```model/meter_data```
+    Available subcommands:
+        api       Launch the FastAPI service
+        train     Train the main meter reading model
+        train-stn Train the STN correction model
+        valid     Run validation on a labeled dataset
+        infer     Run single-image CLI inference
+        webui     Launch the Gradio WebUI
+        gui       Launch the desktop GUI wrapper
 
-## Demo 
-You can run a demo script for a single image inference.
+    options:
+    -h, --help            show this help message and exit
+    ```
 
-```python predict_online.py```
+    To launch the Gradio WebUI, with `config.yaml` simply run:
 
-## Paper
-The project only for academic research, if you are interested in it, please star our project! And cite our paper as follows:
+    ```bash
+    gaugeread webui -c config.yaml
+    ```
+
+## Training and Validation
+
+You can train the main meter reading model and the STN correction model using the `train` and `train-stn` subcommands. You can download the meter reading model dataset from the [release page](https://github.com/SUC-DriverOld/gauge-read/releases/tag/weights), unzip it, and place it in the `datas` directory. STN model use generated data, so you can directly run the training command without additional data preparation. To train with your own dataset, you need to modify the `gauge_read/configs/config.yaml` file accordingly.
+
+- Train the main meter reading model (use `gaugeread train -h` to see more options)
+
+    ```bash
+    gaugeread train -c config.yaml
+    ```
+
+- Train the STN correction model (use `gaugeread train-stn -h` to see more options)
+
+    ```bash
+    gaugeread train-stn -c config.yaml
+    ```
+
+- You can run validation on a labeled dataset using the `valid` subcommand. You need to prepare a labeled dataset in the same format as the training data and specify its path in the `config.yaml` file.
+
+    ```bash
+    gaugeread valid -c config.yaml
+    ```
+
+## Inference
+
+We provide several options for running inference on images, including single-image CLI inference, a Gradio WebUI, and a desktop GUI wrapper. You can use the `infer`, `webui`, and `gui` subcommands to launch these interfaces.
+
+We also provide api service for inference. You can launch the FastAPI service using the `api` subcommand, and then send POST requests to the `/infer` endpoint with an image file to get the meter reading results.
+
+## Acknowledgments
+
+Thank you for the contribution of the following paper and its code to this project.
+
 ```
 @misc{shu2023read,
-      title={Read Pointer Meters in complex environments based on a Human-like Alignment and Recognition Algorithm}, 
-      author={Yan Shu and Shaohui Liu and Honglei Xu and Feng Jiang},
-      year={2023},
-      eprint={2302.14323},
-      archivePrefix={arXiv},
-      primaryClass={cs.CV}
+    title={Read Pointer Meters in complex environments based on a Human-like Alignment and Recognition Algorithm}, 
+    author={Yan Shu and Shaohui Liu and Honglei Xu and Feng Jiang},
+    year={2023},
+    eprint={2302.14323},
+    archivePrefix={arXiv},
+    primaryClass={cs.CV}
 }
 ```
-
-
-
-
-

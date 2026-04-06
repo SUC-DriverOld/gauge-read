@@ -1,36 +1,23 @@
-system:
-  cuda: true
-  num_workers: 0
-
 experiment:
-  exp_name: multimodal_convnext
+  exp_name: test
   save_dir: logs
-
-stn_experiment:
-  exp_name: stn_convnext
-  save_dir: logs
-
-model:
-  net: convnext_tiny
-  use_multimodal: true
-  means: [0.485, 0.456, 0.406]
-  stds: [0.229, 0.224, 0.225]
 
 data:
   image_path: datas/train/images
   label_path: 
   - datas/train/labels_0
   - datas/train/labels_1
-  test_size: [512, 1024]
+  stn_test_path: datas/val/images
+  num_workers: 0
+  pin_memory: true
   stn_correction: true
-  stn_model_path: pretrain/stn/ep35_loss0.0551.pth
 
 predict:
   model_path: pretrain/meter/textgraph_convnext_tiny_100_release.pth
-  data_dir: datas/test
+  stn_model_path: pretrain/stn/ep35_loss0.0551.pth
+  yolo_model_path: pretrain/yolo/best.pt
   use_yolo: true
   use_stn: true
-  yolo_model_path: pretrain/yolo/best.pt
   yolo_imgsz: 640
   yolo_conf: 0.6
   yolo_iou: 0.3
@@ -38,7 +25,15 @@ predict:
   yolo_device: auto
   yolo_half: null
 
+model:
+  net: convnext_tiny
+  use_multimodal: true
+  test_size: [512, 1024]
+  means: [0.485, 0.456, 0.406]
+  stds: [0.229, 0.224, 0.225]
+
 training:
+  device: cuda:0
   seed: 114514
   max_epoch: 100
   start_epoch: 0
@@ -51,17 +46,16 @@ training:
   cosine_t_max: 101
   gamma: 0.1
   momentum: 0.9
-  save_freq: 5
   display_freq: 10
 
 stn_training:
+  device: cuda:0
   seed: 114514
   epochs: 100
   batch_size: 16
   lr: 0.0001
   lr_min: 0.000001
-  step: 1000
-  test_dir: null
+  step: 100
   disable_homography: false
   disable_artefacts: false
   disable_arguments: false

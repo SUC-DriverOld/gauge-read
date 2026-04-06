@@ -18,17 +18,10 @@ from gauge_read.utils.config import AttrDict
 from gauge_read.utils.logger import logger
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Train STN model")
-    parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
-    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
-    return parser.parse_args()
-
-
 def train(cfg):
-    device = cfg.system.device
-    exp_name = cfg.stn_experiment.exp_name
-    save_dir = cfg.stn_experiment.save_dir
+    device = cfg.stn_training.device
+    exp_name = f"stn_{cfg.experiment.exp_name}"
+    save_dir = cfg.experiment.save_dir
     log_dir = os.path.join(save_dir, exp_name)
     os.makedirs(log_dir, exist_ok=True)
     writer = SummaryWriter(logdir=log_dir)
@@ -44,26 +37,26 @@ def train(cfg):
         trn_dataset,
         batch_size=cfg.stn_training.batch_size,
         shuffle=True,
-        num_workers=cfg.system.num_workers,
-        pin_memory=cfg.system.device.type == "cuda",
+        num_workers=cfg.data.num_workers,
+        pin_memory=cfg.data.pin_memory,
     )
     logger.info(
         "STN training dataset loaded: size=%s, batch_size=%s, num_workers=%s",
         len(trn_dataset),
         cfg.stn_training.batch_size,
-        cfg.system.num_workers,
+        cfg.data.num_workers,
     )
 
     test_loader = None
-    test_dir = cfg.stn_training.get("test_dir")
+    test_dir = cfg.data.get("stn_test_path")
     if test_dir and os.path.exists(test_dir):
         test_dataset = STNTest(test_dir)
         test_loader = DataLoader(
             test_dataset,
             batch_size=cfg.stn_training.batch_size,
             shuffle=False,
-            num_workers=cfg.system.num_workers,
-            pin_memory=cfg.system.device.type == "cuda",
+            num_workers=cfg.data.num_workers,
+            pin_memory=cfg.data.pin_memory,
         )
         logger.info("STN validation dataset loaded from %s, size=%s", test_dir, len(test_dataset))
     elif test_dir:
@@ -81,7 +74,7 @@ def train(cfg):
     best_loss = float("inf")
     for ep in range(cfg.stn_training.epochs):
         logger.info("Starting STN epoch %s/%s", ep + 1, cfg.stn_training.epochs)
-        train_pbar = tqdm(trn_loader, total=len(trn_loader), desc=f"Train Epoch {ep}", leave=False)
+        train_pbar = tqdm(trn_loader, total=len(trn_loader), desc=f"Epoch {ep}")
         for i, (img, Minv, center) in enumerate(train_pbar):
             model_stn.train()
             optimizer.zero_grad()
@@ -109,11 +102,10 @@ def train(cfg):
 
             global_step = ep * len(trn_loader) + i
             current_lr = scheduler.get_last_lr()[0]
-            writer.add_scalar("train/lr", current_lr, global_step)
-            writer.add_scalar("train/loss", loss.item(), global_step)
-            writer.add_scalar("train/loss_reg", loss_reg.item(), global_step)
-            writer.add_scalar("train/loss_center", loss_center.item(), global_step)
-            writer.add_scalar("train/avg_loss", total_loss / (global_step + 1), global_step)
+            writer.add_scalar("STN/lr", current_lr, global_step)
+            writer.add_scalar("STN/loss", loss.item(), global_step)
+            writer.add_scalar("STN/loss_reg", loss_reg.item(), global_step)
+            writer.add_scalar("STN/loss_center", loss_center.item(), global_step)
 
             train_pbar.set_postfix(
                 {
@@ -136,25 +128,21 @@ def train(cfg):
                 )
 
             if i == 0:
-                # 转换坐标到像素坐标 (sz=224)
                 points_pixel = center * 224.0
-                # 对点进行 warp
                 warped_points = warp_points(points_pixel, Minv_pred, device=device, sz=224)
-
-                # 在原图和变换图上画红点
                 img_with_pt = draw_points_on_batch(img, points_pixel, color=(1.0, 0.0, 0.0))
 
                 img_warped = warp(img, Minv_pred, device=device)
                 img_warped_with_pt = draw_points_on_batch(img_warped, warped_points, color=(1.0, 0.0, 0.0))
 
-                writer.add_images("train/original", img_with_pt, global_step)
-                writer.add_images("train/warped", img_warped_with_pt, global_step)
+                writer.add_images("STN/train_original", img_with_pt, global_step)
+                writer.add_images("STN/train_warped", img_warped_with_pt, global_step)
 
         if test_loader:
             model_stn.eval()
             with torch.no_grad():
                 logger.info("Running STN validation for epoch %s", ep)
-                test_pbar = tqdm(test_loader, total=len(test_loader), desc=f"Test Epoch {ep}", leave=False)
+                test_pbar = tqdm(test_loader, total=len(test_loader), desc=f"Epoch {ep}", leave=False)
                 for i, img in enumerate(test_pbar):
                     img = img.to(device)
                     Minv_pred, _, pred_center = model_stn(img)
@@ -168,26 +156,29 @@ def train(cfg):
                         img_warped = warp(img, Minv_pred, device=device)
                         img_warped_with_pt = draw_points_on_batch(img_warped, warped_points, color=(1.0, 0.0, 0.0))
 
-                        writer.add_images("test/original", img_with_pt, global_step)
-                        writer.add_images("test/warped", img_warped_with_pt, global_step)
+                        writer.add_images("STN/test_original", img_with_pt, global_step)
+                        writer.add_images("STN/test_warped", img_warped_with_pt, global_step)
 
         ep_loss = total_loss / ((ep + 1) * len(trn_loader))
         logger.info("Finished STN epoch %s: avg_loss=%.6f, best_loss=%.6f", ep, ep_loss, best_loss)
+
         if ep_loss < best_loss:
             best_loss = ep_loss
-            save_path = os.path.join(save_dir, exp_name, f"ep{ep}_loss{ep_loss:.4f}.pth")
+            logger.info("New best loss %.4f achieved at epoch %s, saving model checkpoint", best_loss, ep)
+            save_path = os.path.join(save_dir, exp_name, f"stn_ep{ep}_loss{ep_loss:.4f}.pth")
             torch.save(model_stn.state_dict(), save_path)
-            logger.info("Saved new best STN checkpoint to %s", save_path)
 
     writer.close()
     logger.info("STN training finished: best_loss=%.6f", best_loss)
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    parser = argparse.ArgumentParser(description="Train STN model")
+    parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args()
     if args.debug:
         import logging
-
         logger.console_handler.setLevel(logging.DEBUG)
         logger.info("train_stn console log level set to DEBUG")
 

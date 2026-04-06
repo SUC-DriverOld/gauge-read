@@ -138,41 +138,6 @@ class BatchInference(GaugeApp):
 
         return zip_path
 
-    def _annotate_result_image(self, image, ratio, reading):
-        if image is None:
-            return None
-
-        annotated = np.asarray(image).copy()
-        if annotated.ndim == 2:
-            annotated = cv2.cvtColor(annotated, cv2.COLOR_GRAY2RGB)
-
-        overlay = annotated.copy()
-        cv2.rectangle(overlay, (8, 8), (260, 76), (0, 0, 0), -1)
-        annotated = cv2.addWeighted(overlay, 0.35, annotated, 0.65, 0)
-
-        text_color = (255, 255, 255)
-        cv2.putText(
-            annotated,
-            f"Radio: {self._format_result_value(ratio)}",
-            (18, 35),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            text_color,
-            2,
-            cv2.LINE_AA,
-        )
-        cv2.putText(
-            annotated,
-            f"Result: {self._format_result_value(reading)}",
-            (18, 63),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            text_color,
-            2,
-            cv2.LINE_AA,
-        )
-        return annotated
-
     def process_directory(self, input_dir, use_stn=True, use_yolo=False, progress=None):
         if self.textnet is None:
             return f"<div style='padding:12px;color:{THEME_ERROR_COLOR};'>模型未加载</div>", None, None
@@ -217,9 +182,7 @@ class BatchInference(GaugeApp):
                     rgb_image = pil_image.convert("RGB")
                     vis_img, reading, start_val, end_val = self.process_image(rgb_image, use_stn, use_yolo)
                 ratio = self.current_ratio
-                result_image = self._annotate_result_image(
-                    vis_img if vis_img is not None else np.array(rgb_image), ratio=ratio, reading=reading
-                )
+                result_image = self.draw_visualization_with_value()
                 rows.append(
                     {
                         "filename": os.path.basename(image_path),

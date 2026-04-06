@@ -18,11 +18,11 @@ from gauge_read.utils.reader import MeterReader, TextDetector, YOLODetector
 def main(args, cfg):
     stn_transformer = None
     if cfg.predict.get("use_stn", False):
-        stn_model_path = cfg.data.get("stn_model_path", "")
+        stn_model_path = cfg.predict.get("stn_model_path", "")
         logger.info("Initializing STN for inference from %s", stn_model_path)
-        stn_transformer = STNTransformer(stn_model_path, device=cfg.system.device)
+        stn_transformer = STNTransformer(stn_model_path, device=cfg.training.device)
 
-    predict_dir = args.data_dir or cfg.predict.get("data_dir", "datas/demo")
+    predict_dir = args.input_dir
     logger.info("Starting offline inference: predict_dir=%s", predict_dir)
 
     if not os.path.isdir(predict_dir):
@@ -39,14 +39,14 @@ def main(args, cfg):
         )
     state_dict = torch.load(model_path)
     model.load_state_dict(state_dict["model"])
-    model = model.to(cfg.system.device)
-    logger.info("Inference TextNet loaded and moved to device=%s", cfg.system.device)
+    model = model.to(cfg.training.device)
+    logger.info("Inference TextNet loaded and moved to device=%s", cfg.training.device)
     converter = StringLabelConverter()
 
     det = YOLODetector(cfg=cfg)
     detector = TextDetector(model)
     meter = MeterReader(debug=True)
-    transform = BaseTransform(size=cfg.data.test_size, mean=cfg.model.means, std=cfg.model.stds)
+    transform = BaseTransform(size=cfg.model.test_size, mean=cfg.model.means, std=cfg.model.stds)
 
     image_list = os.listdir(predict_dir)
     logger.info("Found %s files in predict directory", len(image_list))
@@ -85,7 +85,7 @@ def main(args, cfg):
             norm_img, _ = transform(meter_img)
             norm_img = norm_img.transpose(2, 0, 1)
             norm_img = torch.from_numpy(norm_img).unsqueeze(0)
-            norm_img = to_device(norm_img, device=cfg.system.device)
+            norm_img = to_device(norm_img, device=cfg.training.device)
             try:
                 output = detector.detect1(norm_img)
             except Exception as _:
@@ -144,8 +144,8 @@ if __name__ == "__main__":
         "-c", "--config", type=str, default=None, help="Path to YAML config file. If omitted, default config is used."
     )
     parser.add_argument(
-        "-d",
-        "--data-dir",
+        "-i",
+        "--input_dir",
         type=str,
         default=None,
         help="Directory containing images to predict. Overrides config/default path.",

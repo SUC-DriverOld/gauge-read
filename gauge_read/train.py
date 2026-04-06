@@ -23,34 +23,20 @@ from gauge_read.utils.logger import logger
 lr = None
 train_step = 0
 converter = StringLabelConverter()
+best_loss = float("inf")
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Train Gauge Read TextNet")
-    parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
-    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
-    return parser.parse_args()
+def train_epoch(model, train_loader, criterion, scheduler, optimizer, epoch, writer, cfg):
+    global train_step, best_loss
 
-
-def save_model(model, epoch, lr, optimzer, cfg):
     save_dir = os.path.join(cfg.experiment.save_dir, cfg.experiment.exp_name)
     os.makedirs(save_dir, exist_ok=True)
-
-    save_path = os.path.join(save_dir, "textgraph_{}_{}.pth".format(model.backbone_name, epoch))
-    logger.info("Saving training checkpoint to %s", save_path)
-    state_dict = {"epoch": epoch, "model": model.state_dict()}
-    torch.save(state_dict, save_path)
-
-
-def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, cfg):
-    global train_step
 
     losses = AverageMeter()
     batch_time = AverageMeter()
     data_time = AverageMeter()
     end = time.time()
     model.train()
-    # scheduler.step()
     logger.info("Starting training epoch %s with %s batches", epoch, len(train_loader))
 
     pbar = tqdm(enumerate(train_loader), total=len(train_loader), desc=f"Epoch {epoch}")
@@ -60,7 +46,7 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, c
         train_step += 1
 
         img, pointer_mask, dail_mask, text_mask, train_mask = to_device(
-            img, pointer_mask, dail_mask, text_mask, train_mask, device=cfg.system.device
+            img, pointer_mask, dail_mask, text_mask, train_mask, device=cfg.training.device
         )
 
         if i == 0:
@@ -79,8 +65,8 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, c
         output, pred_recog = model(img, bboxs, mapping)  # 4*12*640*640
 
         labels, label_lengths = converter.encode(transcripts.tolist())
-        labels = to_device(labels, device=cfg.system.device)
-        label_lengths = to_device(label_lengths, device=cfg.system.device)
+        labels = to_device(labels, device=cfg.training.device)
+        label_lengths = to_device(label_lengths, device=cfg.training.device)
         recog = (labels, label_lengths)
 
         loss_pointer, loss_dail, loss_text, loss_rec = criterion(
@@ -131,10 +117,13 @@ def train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, c
             }
         )
 
-    if epoch % cfg.training.save_freq == 0:
-        save_model(model, epoch, scheduler.get_last_lr()[0], optimizer, cfg)
-
     logger.info("Finished training epoch %s: avg_loss=%.6f", epoch, losses.avg)
+
+    if losses.avg < best_loss:
+        best_loss = losses.avg
+        logger.info("New best loss %.4f achieved at epoch %s, saving model checkpoint", best_loss, epoch)
+        state_dict = {"epoch": epoch, "model": model.state_dict()}
+        torch.save(state_dict, os.path.join(save_dir, f"read_ep{epoch}_loss{losses.avg:.4f}.pth"))
 
 
 def main(cfg):
@@ -150,24 +139,24 @@ def main(cfg):
         trainset,
         batch_size=cfg.training.batch_size,
         shuffle=True,
-        num_workers=cfg.system.num_workers,
-        pin_memory=True,
+        num_workers=cfg.data.num_workers,
+        pin_memory=cfg.data.pin_memory,
         collate_fn=collate_fn,
     )
     logger.info(
         "Training dataset and loader ready: dataset_size=%s, batch_size=%s, num_workers=%s",
         len(trainset),
         cfg.training.batch_size,
-        cfg.system.num_workers,
+        cfg.data.num_workers,
     )
 
     # Model
     model = TextNet(backbone=cfg.model.net, is_training=True, cfg=cfg)
 
-    model = model.to(cfg.system.device)
-    logger.info("Training model initialized: backbone=%s, device=%s", cfg.model.net, cfg.system.device)
+    model = model.to(cfg.training.device)
+    logger.info("Training model initialized: backbone=%s, device=%s", cfg.model.net, cfg.training.device)
 
-    if cfg.system.cuda:
+    if "cuda" in cfg.training.device and torch.cuda.is_available():
         cudnn.benchmark = True
         logger.info("CUDA benchmark enabled")
 
@@ -216,7 +205,7 @@ def main(cfg):
         cfg.training.start_epoch,
     )
     for epoch in range(cfg.training.start_epoch, cfg.training.start_epoch + cfg.training.max_epoch + 1):
-        train(model, train_loader, criterion, scheduler, optimizer, epoch, writer, cfg)  # train
+        train_epoch(model, train_loader, criterion, scheduler, optimizer, epoch, writer, cfg)  # train
         scheduler.step()
     logger.info("Training finished for experiment %s", cfg.experiment.exp_name)
 
@@ -227,10 +216,12 @@ def main(cfg):
 
 
 if __name__ == "__main__":
-    args = parse_args()
+    parser = argparse.ArgumentParser(description="Train Gauge Read TextNet")
+    parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
+    parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
+    args = parser.parse_args()
     if args.debug:
         import logging
-
         logger.console_handler.setLevel(logging.DEBUG)
         logger.info("WebUI console log level set to DEBUG")
 

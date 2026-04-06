@@ -1,10 +1,15 @@
 import numpy as np
 import cv2
 import torch
-from kornia.geometry.transform import warp_perspective
+import json
+import os
+from pathlib import Path
 
+from kornia.geometry.transform import warp_perspective
+from gauge_read.utils.logger import logger
 
 _warp_norm_cache = {}
+IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 
 
 class AverageMeter(object):
@@ -177,3 +182,126 @@ def draw_points_on_batch(img_batch, points, radius=3, color=(1.0, 0.0, 0.0)):
         out_imgs.append(img_single.transpose(2, 0, 1))
 
     return torch.from_numpy(np.stack(out_imgs)).to(img_batch.device)
+
+
+def write_json_output(payload, output_path):
+    output_file = Path(output_path)
+    output_file.parent.mkdir(parents=True, exist_ok=True)
+    with output_file.open("w", encoding="utf-8") as file_obj:
+        json.dump(payload, file_obj, indent=2, ensure_ascii=False)
+
+
+def collect_input_images(input_path):
+    if not os.path.exists(input_path):
+        raise FileNotFoundError(f"Input path not found: {input_path}")
+
+    if os.path.isfile(input_path):
+        return [input_path]
+
+    if os.path.isdir(input_path):
+        image_paths = [
+            os.path.join(input_path, name)
+            for name in sorted(os.listdir(input_path))
+            if os.path.isfile(os.path.join(input_path, name)) and Path(name).suffix.lower() in IMAGE_EXTENSIONS
+        ]
+        if not image_paths:
+            raise FileNotFoundError(f"No images found in directory: {input_path}")
+        return image_paths
+
+    raise ValueError(f"Unsupported input path: {input_path}")
+
+
+def save_result_image(app_logic, output_path):
+    vis_res = app_logic.draw_visualization_with_value()
+    save_ok = cv2.imwrite(output_path, cv2.cvtColor(vis_res, cv2.COLOR_RGB2BGR))
+    if not save_ok:
+        raise RuntimeError(f"Failed to save output image: {output_path}")
+
+
+def build_output_path(output_arg, image_path, multiple):
+    if not output_arg:
+        return None
+
+    output_path = Path(output_arg)
+    if multiple:
+        output_path.mkdir(parents=True, exist_ok=True)
+        return str(output_path / f"{Path(image_path).stem}_result.png")
+
+    if output_path.suffix:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        return str(output_path)
+
+    output_path.mkdir(parents=True, exist_ok=True)
+    return str(output_path / f"{Path(image_path).stem}_result.png")
+
+
+def build_json_output_path(output_arg, input_path, multiple):
+    if not output_arg:
+        return None
+
+    output_path = Path(output_arg)
+    if multiple:
+        output_path.mkdir(parents=True, exist_ok=True)
+        return str(output_path / "inference_results.json")
+
+    if output_path.suffix:
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        return str(output_path.with_suffix(".json"))
+
+    output_path.mkdir(parents=True, exist_ok=True)
+    return str(output_path / f"{Path(input_path).stem}_result.json")
+
+
+def build_result(app_logic, image_path, measure_value):
+    return {
+        "status": "success",
+        "image_path": image_path,
+        "measure_value": measure_value,
+        "ratio": getattr(app_logic, "current_ratio", 0.0),
+        "start_value": app_logic.current_start_value,
+        "end_value": app_logic.current_end_value,
+        "ocr_error": bool(getattr(app_logic, "current_ocr_error", False)),
+    }
+
+
+def process_single_image(app_logic, image_path, use_stn, use_yolo, start_value, end_value, output_path=None):
+    image = cv2.imread(image_path)
+    if image is None:
+        logger.error("Inference failed to read image structure from path: %s", image_path)
+        return {"status": "error", "image_path": image_path, "message": "Failed to read image structure", "ocr_error": False}
+
+    logger.info("Input image loaded successfully: %s", image_path)
+    logger.debug("Input image shape: %s", image.shape)
+
+    vis_img, value, _, _ = app_logic.process_image(image, use_stn=use_stn, use_yolo=use_yolo)
+    logger.debug("Initial inference output: value=%s, image_path=%s", value, image_path)
+
+    if vis_img is None:
+        logger.error("Inference failed for %s: %s", image_path, value)
+        return {
+            "status": "error",
+            "image_path": image_path,
+            "message": str(value),
+            "ocr_error": bool(getattr(app_logic, "current_ocr_error", False)),
+        }
+
+    need_recalc = False
+    if start_value is not None:
+        app_logic.current_start_value = start_value
+        need_recalc = True
+        logger.info("Applied start value override for %s: %s", image_path, start_value)
+
+    if end_value is not None:
+        app_logic.current_end_value = end_value
+        need_recalc = True
+        logger.info("Applied end value override for %s: %s", image_path, end_value)
+
+    final_value = app_logic.recalculate() if need_recalc else value
+    result = build_result(app_logic, image_path, final_value)
+
+    if output_path:
+        save_result_image(app_logic, output_path)
+        result["output_path"] = output_path
+        logger.info("Result image saved to %s", output_path)
+
+    return result

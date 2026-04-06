@@ -108,7 +108,7 @@ class MeterDataset(TextDataset):
 
         if self.cfg is not None and self.cfg.data.get("stn_correction", False):
             # Use CPU for dataset workers to avoid multiprocessing issues with CUDA
-            self.stn_transformer = STNTransformer(self.cfg.data.get("stn_model_path", ""))
+            self.stn_transformer = STNTransformer(self.cfg.predict.get("stn_model_path", ""))
         else:
             self.stn_transformer = None
 

@@ -1,5 +1,4 @@
 import os
-
 import cv2
 import numpy as np
 import torch
@@ -18,13 +17,13 @@ from gauge_read.utils.tools import to_device
 class GaugeApp:
     def __init__(self, cfg):
         self.cfg = cfg
-        self.device = cfg.system.device
+        self.device = cfg.training.device
         self.textnet = None
         self.stn = None
         self.detector = None
         self.converter = StringLabelConverter()
         self.meter_reader = MeterReader()
-        self.transform = BaseTransform(size=cfg.data.test_size, mean=cfg.model.means, std=cfg.model.stds)
+        self.transform = BaseTransform(size=cfg.model.test_size, mean=cfg.model.means, std=cfg.model.stds)
         self.yolo_detector = None
 
         self.current_image = None
@@ -33,17 +32,19 @@ class GaugeApp:
         self.current_start_value = 0.0
         self.current_end_value = 0.0
         self.current_ratio = 0.0
+        self.current_value = 0.0
         self.current_center = None
+        self.current_ocr_error = False
         self.scale_range = 1.6
         self.yolo_weights_path = None
 
     @staticmethod
     def notify_error(message):
-        logger.debug("GaugeApp error notification: %s", message)
+        pass
 
     @staticmethod
     def notify_info(message):
-        logger.debug("GaugeApp info notification: %s", message)
+        pass
 
     def sync_runtime_from(self, other):
         self.textnet = other.textnet
@@ -55,10 +56,10 @@ class GaugeApp:
         self.yolo_detector = other.yolo_detector
         self.yolo_weights_path = other.yolo_weights_path
 
-    def load_models(self, textnet_path, stn_path=None, yolo_path=None):
-        textnet_path = textnet_path or self.cfg.predict.get("model_path", "")
-        stn_path = stn_path if stn_path is not None else self.cfg.data.get("stn_model_path", "")
-        yolo_path = yolo_path or self.cfg.predict.get("yolo_model_path", "")
+    def load_models(self, textnet_path=None, stn_path=None, yolo_path=None):
+        textnet_path = textnet_path or self.cfg.predict.model_path
+        stn_path = stn_path or self.cfg.predict.stn_model_path
+        yolo_path = yolo_path or self.cfg.predict.yolo_model_path
 
         logger.info(
             "Loading models for GaugeApp: textnet=%s, stn=%s, yolo=%s, device=%s",
@@ -71,7 +72,7 @@ class GaugeApp:
         if not textnet_path or not os.path.exists(textnet_path):
             self.textnet = None
             self.detector = None
-            msg = f"读数模型文件不存在: {textnet_path}"
+            msg = f"Reading model file not found: {textnet_path}"
             logger.error(msg)
             self.notify_error(msg)
             raise FileNotFoundError(msg)
@@ -93,7 +94,7 @@ class GaugeApp:
         except Exception as exc:
             self.textnet = None
             self.detector = None
-            msg = f"无法加载读数模型: {str(exc)}"
+            msg = f"Failed to load reading model: {str(exc)}"
             logger.exception("Failed to load TextNet weights from %s", textnet_path)
             self.notify_error(msg)
             raise
@@ -113,7 +114,7 @@ class GaugeApp:
                     logger.info("STN loaded successfully from %s", stn_path)
             except Exception as exc:
                 logger.exception("Failed to initialize STN from %s", stn_path)
-                self.notify_error(f"无法加载STN模型: {str(exc)}")
+                self.notify_error(f"Failed to load STN model: {str(exc)}")
                 self.stn = None
         else:
             self.stn = None
@@ -126,18 +127,18 @@ class GaugeApp:
             logger.info("YOLO detector initialized successfully: weights=%s", self.yolo_weights_path)
         except Exception as exc:
             logger.exception("Failed to initialize YOLO detector from %s", yolo_path if yolo_path else "default")
-            self.notify_error(f"无法加载YOLO模型: {str(exc)}")
+            self.notify_error(f"Failed to load YOLO model: {str(exc)}")
             self.yolo_detector = None
             self.yolo_weights_path = None
 
         self.notify_info(
-            f"模型加载完成\n读数模型：{textnet_path}\nSTN模型：{stn_path if stn_path else 'disabled'}\nYOLO模型：{self.yolo_weights_path if self.yolo_detector is not None else 'failed'}"
+            f"Models loaded successfully. Reading model: {textnet_path}\nSTN model: {stn_path if stn_path else 'disabled'}\nYOLO model: {self.yolo_weights_path if self.yolo_detector is not None else 'failed'}"
         )
 
     def process_image(self, input_image, use_stn=True, use_yolo=False):
         if self.textnet is None:
             logger.error("process_image called before TextNet was loaded")
-            return None, "模型未加载", 0.0, 0.0
+            return None, "Reading model not loaded", 0.0, 0.0
 
         logger.info("Starting single-image inference: use_stn=%s, use_yolo=%s", use_stn, use_yolo)
 
@@ -154,14 +155,14 @@ class GaugeApp:
         if use_yolo:
             if self.yolo_detector is None:
                 logger.error("YOLO inference requested but YOLO detector is not loaded")
-                return None, "YOLO模型未正确加载，请先选择YOLO模型并点击加载模型", 0.0, 0.0
+                return None, "YOLO model not loaded. Please select a YOLO model and click 'Load Model'", 0.0, 0.0
             _, _, _, meter_list = self.yolo_detector.detect(image, "web_upload")
             logger.debug("YOLO detection completed: detected_meters=%s", len(meter_list))
             if len(meter_list) > 0:
                 meter_img = meter_list[0]
             else:
                 logger.warning("YOLO did not detect any meter in the current image")
-                return None, "YOLO未检测到仪表", 0.0, 0.0
+                return None, "YOLO did not detect any meter", 0.0, 0.0
 
         processed_img = meter_img
         predicted_center = None
@@ -198,7 +199,7 @@ class GaugeApp:
             output = self.detector.detect1(trans_img)
         except Exception as exc:
             logger.exception("Text detector inference failed")
-            return None, f"推理错误: {exc}", 0.0, 0.0
+            return None, f"Inference error: {exc}", 0.0, 0.0
 
         pointer_pred = output["pointer"]
         preds = output["reco"]
@@ -240,6 +241,7 @@ class GaugeApp:
             ocr_error = True
             logger.warning("OCR transcript could not be converted to numeric value: %s", pred_transcripts)
 
+        self.current_ocr_error = ocr_error
         value = self.recalculate(ocr_error)
         logger.info(
             "Single-image inference completed: value=%s, ratio=%s, start_value=%s, end_value=%s, ocr_error=%s",
@@ -278,13 +280,13 @@ class GaugeApp:
 
     def recalculate(self, ocr_error=False):
         if self.textnet is None or self.detector is None:
-            return "模型未加载"
+            return "Reading model not loaded"
         if self.current_image is None:
-            return "请先运行推理"
+            return "Please run inference first"
         if not self.current_std_points or len(self.current_std_points) < 2:
-            return "缺少标定点"
+            return "Missing calibration points"
         if not self.current_pointer_line:
-            return "缺少指针"
+            return "Missing pointer"
 
         value, ratio = self.meter_reader.compute_reading(
             self.current_std_points,
@@ -294,6 +296,7 @@ class GaugeApp:
             self.current_center,
         )
         self.current_ratio = ratio
+        self.current_value = value
         if ocr_error:
             return "OCR error, fallback to ratio-based reading: {:.2f}".format(value)
         logger.info("Calculation completed: value=%s, ratio=%s", value, ratio)
@@ -340,3 +343,38 @@ class GaugeApp:
             cv2.putText(img, "Center", (cx + 10, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 1)
 
         return img
+
+    def draw_visualization_with_value(self, image=None):
+        if image is None:
+            image = self.draw_visualization()
+
+        annotated = np.asarray(image).copy()
+        if annotated.ndim == 2:
+            annotated = cv2.cvtColor(annotated, cv2.COLOR_GRAY2RGB)
+
+        overlay = annotated.copy()
+        cv2.rectangle(overlay, (8, 8), (260, 76), (0, 0, 0), -1)
+        annotated = cv2.addWeighted(overlay, 0.35, annotated, 0.65, 0)
+
+        text_color = (255, 255, 255)
+        cv2.putText(
+            annotated,
+            f"Radio: {self.current_ratio}",
+            (18, 35),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            text_color,
+            2,
+            cv2.LINE_AA,
+        )
+        cv2.putText(
+            annotated,
+            f"Result: {self.current_value:.2f}" if not self.current_ocr_error else "Result: OCR error",
+            (18, 63),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            text_color,
+            2,
+            cv2.LINE_AA,
+        )
+        return annotated
