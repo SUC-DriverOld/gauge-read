@@ -1,5 +1,6 @@
 # Gauge Read
 
+Gauge Read is a comprehensive solution for reading pointer meters in complex environments. It includes a main meter reading model, a Spatial Transformer Network (STN) for correcting perspective distortion, and a YOLO-based meter detection model. The project provides a unified command line interface for training, validation, inference, and launching a web UI and desktop GUI.
 
 ## Installation
 
