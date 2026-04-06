@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import argparse
 
-from gauge_read.utils.augmentation import Augmentation
+from gauge_read.datasets.augmentation import Augmentation
 from gauge_read.datasets.meter_data import MeterDataset
 from gauge_read.utils.config import AttrDict
 import matplotlib.pyplot as plt

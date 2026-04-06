@@ -2,16 +2,6 @@ experiment:
   exp_name: test
   save_dir: logs
 
-data:
-  image_path: datas/train/images
-  label_path: 
-  - datas/train/labels_0
-  - datas/train/labels_1
-  stn_test_path: datas/val/images
-  num_workers: 0
-  pin_memory: true
-  stn_correction: true
-
 predict:
   model_path: pretrain/meter/textgraph_convnext_tiny_100_release.pth
   stn_model_path: pretrain/stn/ep35_loss0.0551.pth
@@ -24,6 +14,35 @@ predict:
   yolo_max_det: 160
   yolo_device: auto
   yolo_half: null
+
+data:
+  image_path: datas/train/images
+  label_path: 
+  - datas/train/labels_0
+  - datas/train/labels_1
+  stn_test_path: datas/val/images
+  num_workers: 0
+  pin_memory: true
+  stn_correction: true
+  augmentation:
+    random_resize_scale: true
+    augment_color: false
+    random_crop_flip: false
+    random_resized_crop: false
+    rotate: false
+    rotate_padding: false
+    square_padding: false
+    random_resize_padding: false
+    resize_limit_square: true
+    random_brightness: false
+    random_contrast: false
+    random_mirror: false
+    random_erasing: false
+    random_cutout: false
+    resize: false
+    resize_square: false
+    minus_mean: false
+    normalize: true
 
 model:
   net: convnext_tiny

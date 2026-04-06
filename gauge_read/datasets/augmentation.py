@@ -7,9 +7,6 @@ import numpy.random as random
 from shapely.geometry import Polygon
 
 
-###<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<###
-###<<<<<<<<<  Function  >>>>>>>>>>>>###
-###>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>###
 def crop_first(image, polygons, scale=10):
     polygons_new = copy.deepcopy(polygons)
     h, w, _ = image.shape
@@ -45,9 +42,6 @@ def crop_first(image, polygons, scale=10):
     return h_axis, w_axis, pp_polys
 
 
-####<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<####
-####<<<<<<<<<<<  Class  >>>>>>>>>>>>>####
-####>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>####
 class Compose(object):
     """Composes several augmentations together.
     Args:
@@ -722,24 +716,57 @@ class RandomResizePadding(object):
 
 
 class Augmentation(object):
-    def __init__(self, size, mean, std):
+    def __init__(self, size, mean, std, aug_cfg=None):
         self.size = size
         self.mean = mean
         self.std = std
-        self.augmentation = Compose(
-            [
-                RandomResizeScale(size=self.size, ratio=(3.0 / 4, 5.0 / 2)),
-                # RandomCropFlip(),
-                # RandomResizedCrop(),
-                # RotatePadding(up=30, colors=True),
-                # RandomResizePadding(size=self.size, random_scale=self.input_scale),
-                ResizeLimitSquare(size=self.size),
-                # RandomBrightness(),
-                # RandomContrast(),
-                # RandomMirror(),
-                Normalize(mean=self.mean, std=self.std),
-            ]
-        )
+        self.aug_cfg = aug_cfg or {}
+        self.augmentation = Compose(self._build_transforms())
+
+    def _is_enabled(self, key, default=False):
+        return bool(self.aug_cfg.get(key, default))
+
+    def _build_transforms(self):
+        transforms = []
+
+        if self._is_enabled("random_resize_scale", True):
+            transforms.append(RandomResizeScale(size=self.size, ratio=(3.0 / 4, 5.0 / 2)))
+        if self._is_enabled("augment_color", False):
+            transforms.append(AugmentColor())
+        if self._is_enabled("random_crop_flip", False):
+            transforms.append(RandomCropFlip())
+        if self._is_enabled("random_resized_crop", False):
+            transforms.append(RandomResizedCrop())
+        if self._is_enabled("rotate", False):
+            transforms.append(Rotate(up=30))
+        if self._is_enabled("rotate_padding", False):
+            transforms.append(RotatePadding(up=30, colors=True))
+        if self._is_enabled("square_padding", False):
+            transforms.append(SquarePadding())
+        if self._is_enabled("random_resize_padding", False):
+            transforms.append(RandomResizePadding(size=self.size))
+        if self._is_enabled("resize_limit_square", True):
+            transforms.append(ResizeLimitSquare(size=self.size))
+        if self._is_enabled("random_brightness", False):
+            transforms.append(RandomBrightness())
+        if self._is_enabled("random_contrast", False):
+            transforms.append(RandomContrast())
+        if self._is_enabled("random_mirror", False):
+            transforms.append(RandomMirror())
+        if self._is_enabled("random_erasing", False):
+            transforms.append(RandomErasing(sr=(0.0004, 0.01), scale=(0.5, 3), ratio=0.2, Type="Erasing"))
+        if self._is_enabled("random_cutout", False):
+            transforms.append(RandomErasing(sr=(0.0004, 0.01), scale=(0.5, 3), ratio=0.2, Type="Cutout"))
+        if self._is_enabled("resize", False):
+            transforms.append(Resize(size=self.size))
+        if self._is_enabled("resize_square", False):
+            transforms.append(ResizeSquare(size=(self.size, int(self.size * 2.5))))
+        if self._is_enabled("minus_mean", False):
+            transforms.append(MinusMean(mean=self.mean))
+        if self._is_enabled("normalize", True):
+            transforms.append(Normalize(mean=self.mean, std=self.std))
+
+        return transforms
 
     def __call__(self, image, polygons=None):
         return self.augmentation(image, polygons)
@@ -752,21 +779,10 @@ class BaseTransform(object):
         self.std = std
         self.augmentation = Compose(
             [
-                # Resize(size),
                 ResizeSquare(size=self.size),
                 Normalize(mean, std),
             ]
         )
-
-    def __call__(self, image, polygons=None):
-        return self.augmentation(image, polygons)
-
-
-class BaseTransformNresize(object):
-    def __init__(self, mean, std):
-        self.mean = mean
-        self.std = std
-        self.augmentation = Compose([Normalize(mean, std)])
 
     def __call__(self, image, polygons=None):
         return self.augmentation(image, polygons)

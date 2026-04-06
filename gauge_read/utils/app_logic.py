@@ -7,7 +7,7 @@ from skimage import morphology
 
 from gauge_read.models.textnet import TextNet
 from gauge_read.utils.reader import MeterReader, TextDetector, YOLODetector
-from gauge_read.utils.augmentation import BaseTransform
+from gauge_read.datasets.augmentation import BaseTransform
 from gauge_read.utils.converter import StringLabelConverter
 from gauge_read.utils.logger import logger
 from gauge_read.utils.stn_transform import STNTransformer

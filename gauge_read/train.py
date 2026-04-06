@@ -14,7 +14,7 @@ from tqdm import tqdm
 from gauge_read.datasets import MeterDataset
 from gauge_read.models.loss import TextLoss
 from gauge_read.models.textnet import TextNet
-from gauge_read.utils.augmentation import Augmentation
+from gauge_read.datasets.augmentation import Augmentation
 from gauge_read.utils.config import AttrDict
 from gauge_read.utils.tools import AverageMeter, to_device, collate_fn
 from gauge_read.utils.converter import StringLabelConverter
@@ -130,9 +130,10 @@ def main(cfg):
     global lr
     means = tuple(cfg.model.means)
     stds = tuple(cfg.model.stds)
+    aug_cfg = cfg.data.get("augmentation", {})
 
-    transform = Augmentation(size=640, mean=means, std=stds)
-    logger.info("Training transform initialized: size=%s, means=%s, stds=%s", 640, means, stds)
+    transform = Augmentation(size=640, mean=means, std=stds, aug_cfg=aug_cfg)
+    logger.info("Training transform initialized: size=%s, means=%s, stds=%s, augmentation=%s", 640, means, stds, dict(aug_cfg))
 
     trainset = MeterDataset(transform=transform, cfg=cfg)
     train_loader = data.DataLoader(

@@ -7,7 +7,7 @@ import torch
 
 from gauge_read.models.textnet import TextNet
 from gauge_read.utils.stn_transform import STNTransformer
-from gauge_read.utils.augmentation import BaseTransform
+from gauge_read.datasets.augmentation import BaseTransform
 from gauge_read.utils.config import AttrDict
 from gauge_read.utils.converter import StringLabelConverter
 from gauge_read.utils.logger import logger
