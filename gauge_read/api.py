@@ -115,7 +115,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Gauge Reader API")
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("-c", "--config", type=str, default=None, help="Path to config YAML")
-    parser.add_argument("-o", "--output", type=str, default=None, help="Directory or file prefix used to save result image/json")
+    parser.add_argument(
+        "-o", "--output", type=str, default=None, help="Directory or file prefix used to save result image/json"
+    )
     parser.add_argument("--host", type=str, default="127.0.0.1", help="API Host")
     parser.add_argument("--port", type=int, default=1145, help="API Port")
     args = parser.parse_args()

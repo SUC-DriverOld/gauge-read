@@ -4,7 +4,7 @@ from torchvision.models import convnext_tiny, ConvNeXt_Tiny_Weights
 
 
 class STNModel(nn.Module):
-    def __init__(self, pretrained=True):
+    def __init__(self, pretrained=False):
         super(STNModel, self).__init__()
         weights = ConvNeXt_Tiny_Weights.IMAGENET1K_V1 if pretrained else None
         self.backbone = convnext_tiny(weights=weights)

@@ -4,7 +4,7 @@ from torchvision.models import convnext_tiny, ConvNeXt_Tiny_Weights
 
 
 class ConvNeXtTiny(nn.Module):
-    def __init__(self, pretrain=True, input_channels=3):
+    def __init__(self, pretrain=False, input_channels=3):
         super().__init__()
 
         weights = ConvNeXt_Tiny_Weights.IMAGENET1K_V1 if pretrain else None

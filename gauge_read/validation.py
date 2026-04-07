@@ -349,9 +349,7 @@ def run_validation(cfg, input_dir, use_yolo=False, use_stn=False, config_path=No
 
     app_model = GaugeApp(cfg)
     app_model.load_models(
-        textnet_path=cfg.predict.model_path,
-        stn_path=cfg.predict.stn_model_path,
-        yolo_path=cfg.predict.yolo_model_path,
+        textnet_path=cfg.predict.model_path, stn_path=cfg.predict.stn_model_path, yolo_path=cfg.predict.yolo_model_path
     )
 
     total_count = len(pairs)

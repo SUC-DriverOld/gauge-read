@@ -179,6 +179,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.debug:
         import logging
+
         logger.console_handler.setLevel(logging.DEBUG)
         logger.info("train_stn console log level set to DEBUG")
 

@@ -77,7 +77,17 @@ class FPN(nn.Module):
         if backbone != "convnext_tiny":
             raise ValueError(f"Unsupported TextNet backbone: {backbone}. Only 'convnext_tiny' is supported.")
 
-        self.backbone = ConvNeXtTiny(pretrain=True, input_channels=input_channels)
+        # Only request torchvision ImageNet weights during training.
+        # In inference we immediately load the project's own checkpoint, so
+        # downloading backbone weights is unnecessary and can fail offline.
+        logger.info(
+            "Initializing FPN backbone: backbone=%s is_training=%s use_multimodal=%s input_channels=%s",
+            backbone,
+            is_training,
+            use_multimodal,
+            input_channels,
+        )
+        self.backbone = ConvNeXtTiny(pretrain=is_training, input_channels=input_channels)
 
         # ConvNeXt-tiny channels for (C1, C2, C3, C4, C5) are (96, 96, 192, 384, 768).
         self.deconv5 = nn.ConvTranspose2d(768, 256, kernel_size=4, stride=2, padding=1)

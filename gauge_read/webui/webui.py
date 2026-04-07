@@ -164,7 +164,7 @@ with gr.Blocks(title="模拟仪表读数系统") as demo:
                             label="图片文件夹",
                             placeholder="请输入待批量推理的图片文件夹路径",
                             value="datas/test",
-                            interactive=True
+                            interactive=True,
                         )
                     with gr.Column(scale=1):
                         batch_use_stn_chk = gr.Checkbox(label="启用STN矫正", value=True)

@@ -371,8 +371,8 @@ class MeterReader(object):
 
         if self.debug:
             font = cv2.FONT_HERSHEY_SIMPLEX
-            cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA,)
-            cv2.putText(ori_img, f"Value: {str(value)}", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2, cv2.LINE_AA,)
+            cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(ori_img, f"Value: {str(value)}", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2, cv2.LINE_AA)
             cv2.imshow("result", ori_img)
             cv2.waitKey(0)
 

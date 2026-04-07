@@ -358,14 +358,7 @@ class GaugeApp:
 
         text_color = (255, 255, 255)
         cv2.putText(
-            annotated,
-            f"Radio: {self.current_ratio}",
-            (18, 35),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.7,
-            text_color,
-            2,
-            cv2.LINE_AA,
+            annotated, f"Radio: {self.current_ratio}", (18, 35), cv2.FONT_HERSHEY_SIMPLEX, 0.7, text_color, 2, cv2.LINE_AA
         )
         cv2.putText(
             annotated,

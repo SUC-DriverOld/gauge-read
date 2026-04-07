@@ -17,7 +17,9 @@ def heatmap(im_gray):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Gauge inference")
-    parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file. If omitted, default config is used.")
+    parser.add_argument(
+        "-c", "--config", type=str, default=None, help="Path to YAML config file. If omitted, default config is used."
+    )
     args = parser.parse_args()
     cfg = AttrDict(args.config or AttrDict.DEFAULT_CONFIG_PATH)
     cfg.print_config()

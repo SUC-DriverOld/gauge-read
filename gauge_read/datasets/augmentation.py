@@ -777,12 +777,7 @@ class BaseTransform(object):
         self.size = size
         self.mean = mean
         self.std = std
-        self.augmentation = Compose(
-            [
-                ResizeSquare(size=self.size),
-                Normalize(mean, std),
-            ]
-        )
+        self.augmentation = Compose([ResizeSquare(size=self.size), Normalize(mean, std)])
 
     def __call__(self, image, polygons=None):
         return self.augmentation(image, polygons)
