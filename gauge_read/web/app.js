@@ -2,7 +2,6 @@ const state = {
     currentFile: null,
     currentFilePreviewUrl: null,
     batchUploadDir: "",
-    batchUploadCount: 0,
     activeTab: "singleTab",
     realtime: {
         stream: null,
@@ -22,8 +21,6 @@ const state = {
     batchRows: [],
     batchPage: 1,
     pageSize: 10,
-    currentBatchJobId: null,
-    batchPollTimer: null,
     batchRowsShown: false,
     batchPackagingNoticeShown: false
 };
@@ -421,7 +418,6 @@ function onImageSelected(event) {
 async function uploadBatchFiles(files) {
     if (!files.length) {
         state.batchUploadDir = "";
-        state.batchUploadCount = 0;
         setBatchUploadPreview(0);
         return;
     }
@@ -433,7 +429,6 @@ async function uploadBatchFiles(files) {
         files.forEach((file) => formData.append("images", file));
         const payload = await request("/api/batch/uploads", { method: "POST", body: formData });
         state.batchUploadDir = payload.input_dir;
-        state.batchUploadCount = payload.count;
         setBatchUploadPreview(payload.count);
         showToast(`已上传 ${payload.count} 张图片`);
     } catch (error) {
@@ -782,7 +777,7 @@ async function pollBatchJob(jobId, button) {
                 showToast("推理已完成，正在打包下载文件");
                 state.batchPackagingNoticeShown = true;
             }
-            state.batchPollTimer = window.setTimeout(() => pollBatchJob(jobId, button), 600);
+            window.setTimeout(() => pollBatchJob(jobId, button), 600);
             return;
         }
 
@@ -797,8 +792,6 @@ async function pollBatchJob(jobId, button) {
             setDownloadLink("downloadCsv", payload.downloads.csv);
             setLoading(button, false, "");
             showToast(`批量推理完成，共 ${payload.rows.length} 张`);
-            state.currentBatchJobId = null;
-            state.batchPollTimer = null;
             state.batchRowsShown = false;
             state.batchPackagingNoticeShown = false;
             return;
@@ -807,19 +800,15 @@ async function pollBatchJob(jobId, button) {
         if (payload.status === "failed") {
             setLoading(button, false, "");
             showToast(payload.error || "批量推理失败", true);
-            state.currentBatchJobId = null;
-            state.batchPollTimer = null;
             state.batchRowsShown = false;
             state.batchPackagingNoticeShown = false;
             return;
         }
 
-        state.batchPollTimer = window.setTimeout(() => pollBatchJob(jobId, button), 600);
+        window.setTimeout(() => pollBatchJob(jobId, button), 600);
     } catch (error) {
         setLoading(button, false, "");
         showToast(error.message, true);
-        state.currentBatchJobId = null;
-        state.batchPollTimer = null;
     }
 }
 
@@ -849,7 +838,6 @@ async function runBatch() {
                 use_yolo: $("batchUseYolo").checked
             })
         });
-        state.currentBatchJobId = payload.job_id;
         pollBatchJob(payload.job_id, button);
     } catch (error) {
         setLoading(button, false, "");

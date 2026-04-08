@@ -98,66 +98,6 @@ class NativeGaugeApp(GaugeApp):
         return self.draw_visualization(), self.recalculate()
 
 
-class BatchInferenceJSON(NativeGaugeApp):
-    def process_directory(self, input_dir, use_stn=True, use_yolo=False):
-        if self.textnet is None:
-            raise RuntimeError("模型未加载")
-
-        input_dir = (input_dir or "").strip()
-        if not input_dir:
-            raise FileNotFoundError("请输入图片文件夹路径")
-        if not os.path.isdir(input_dir):
-            raise FileNotFoundError(f"目录不存在: {input_dir}")
-
-        image_paths = sorted(
-            [
-                os.path.join(input_dir, name)
-                for name in os.listdir(input_dir)
-                if os.path.isfile(os.path.join(input_dir, name)) and os.path.splitext(name)[1].lower() in IMAGE_EXTENSIONS
-            ]
-        )
-        if not image_paths:
-            raise FileNotFoundError(f"目录中未找到图片: {input_dir}")
-
-        rows = []
-        for image_path in image_paths:
-            logger.info("web batch inference processing file: %s", image_path)
-            try:
-                with Image.open(image_path) as pil_image:
-                    rgb_image = pil_image.convert("RGB")
-                    _, reading, start_val, end_val = self.process_image(rgb_image, use_stn, use_yolo)
-                result_image = self.draw_visualization_with_value()
-                rows.append(
-                    {
-                        "filename": os.path.basename(image_path),
-                        "thumbnail": image_to_data_url(result_image, max_width=220),
-                        "full_image": image_to_data_url(result_image),
-                        "start": format_metric(start_val),
-                        "end": format_metric(end_val),
-                        "ratio": format_metric(self.current_ratio),
-                        "reading": format_metric(reading),
-                        "download_image": result_image,
-                    }
-                )
-            except Exception as exc:
-                fallback = np.full((120, 180, 3), 245, dtype=np.uint8)
-                cv2.putText(fallback, "ERROR", (45, 65), cv2.FONT_HERSHEY_SIMPLEX, 0.9, (210, 50, 50), 2)
-                rows.append(
-                    {
-                        "filename": os.path.basename(image_path),
-                        "thumbnail": image_to_data_url(fallback, max_width=220),
-                        "full_image": image_to_data_url(fallback),
-                        "start": "-",
-                        "end": "-",
-                        "ratio": "-",
-                        "reading": f"推理失败: {exc}",
-                        "download_image": fallback,
-                    }
-                )
-
-        return rows
-
-
 class LoadModelsPayload(BaseModel):
     model_path: Optional[str] = None
     stn_path: Optional[str] = None
@@ -448,7 +388,7 @@ def run_batch_job(job_id, input_dir, use_stn, use_yolo):
 
         with _infer_lock:
             logic = get_app_logic()
-            batch_logic = BatchInferenceJSON(get_cfg())
+            batch_logic = NativeGaugeApp(get_cfg())
             batch_logic.sync_runtime_from(logic)
 
             rows = []
@@ -527,8 +467,7 @@ def bootstrap():
         "stn_path": cfg.predict.stn_model_path,
         "yolo_path": cfg.predict.yolo_model_path,
     }
-    loaded = get_app_logic().textnet is not None
-    return {**options, "defaults": defaults, "loaded": loaded, "instructions": INSTRUCTIONS}
+    return {**options, "defaults": defaults, "instructions": INSTRUCTIONS}
 
 
 @app.post("/api/models/load")
