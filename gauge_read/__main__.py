@@ -10,8 +10,7 @@ COMMAND_MODULES = {
     "valid": "gauge_read.validation",
     "infer": "gauge_read.inference",
     "web": "gauge_read.web.app",
-    "webui": "gauge_read.webui.webui",
-    "gui": "gauge_read.webui.gui",
+    "gui": "gauge_read.gui",
 }
 
 COMMAND_HELP = {
@@ -20,9 +19,8 @@ COMMAND_HELP = {
     "train-stn": "Train the STN correction model",
     "valid": "Run validation on a labeled dataset",
     "infer": "Run single-image CLI inference",
-    "web": "Launch the native HTML/CSS/JS Web UI",
-    "webui": "Launch the Gradio WebUI",
-    "gui": "Launch the desktop GUI wrapper",
+    "web": "Launch the native WebUI",
+    "gui": "Launch the desktop GUI wrapper for the WebUI",
 }
 
 

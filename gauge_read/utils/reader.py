@@ -153,6 +153,7 @@ class YOLODetector(object):
 class MeterReader(object):
     def __init__(self, debug=False):
         self.debug = debug
+        self.last_debug_image = None
 
     def compute_reading(self, std_points, pointer_line, start_val=0.0, end_val=0.0, predicted_center=None):
         """
@@ -225,6 +226,7 @@ class MeterReader(object):
         return float(f"{reading:.4f}"), float(f"{ratio:.4f}")
 
     def __call__(self, image, point_mask, dail_mask, word_mask, number, std_point, predicted_center=None):
+        self.last_debug_image = None
         img_result = image.copy()
         value = self.find_lines(img_result, point_mask, dail_mask, word_mask, number, std_point, predicted_center)
         logger.debug("meter reader result=%s", value)
@@ -349,11 +351,9 @@ class MeterReader(object):
             two_value = float(number[0])
         else:
             # Even if number is missing, show ratio
-            font = cv2.FONT_HERSHEY_SIMPLEX
             if self.debug:
-                ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), font, 1.0, (0, 255, 255), 2)
-                cv2.imshow("result", ori_img)
-                cv2.waitKey(0)
+                ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2)
+                self.last_debug_image = ori_img.copy()
             return f"Ratio: {ratio}"
 
         if std_ang * now_ang != 0:
@@ -370,11 +370,9 @@ class MeterReader(object):
             value = round(value, 3)
 
         if self.debug:
-            font = cv2.FONT_HERSHEY_SIMPLEX
             cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
             cv2.putText(ori_img, f"Value: {str(value)}", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2, cv2.LINE_AA)
-            cv2.imshow("result", ori_img)
-            cv2.waitKey(0)
+            self.last_debug_image = ori_img.copy()
 
         return value
 

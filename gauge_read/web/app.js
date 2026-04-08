@@ -1,5 +1,6 @@
 const state = {
     currentFile: null,
+    currentFilePreviewUrl: null,
     resultNaturalWidth: 0,
     resultNaturalHeight: 0,
     toastTimer: null,
@@ -7,7 +8,9 @@ const state = {
     batchPage: 1,
     pageSize: 10,
     currentBatchJobId: null,
-    batchPollTimer: null
+    batchPollTimer: null,
+    batchRowsShown: false,
+    batchPackagingNoticeShown: false
 };
 
 function $(id) {
@@ -44,7 +47,10 @@ async function request(url, options = {}) {
 
 function setModelStatus(loaded) {
     const badge = $("modelStatus");
-    badge.textContent = loaded ? "已加载" : "未加载";
+    if (!badge) {
+        return;
+    }
+    badge.textContent = loaded ? "模型已加载" : "模型未加载";
     badge.className = `status-badge ${loaded ? "ready" : "idle"}`;
 }
 
@@ -67,6 +73,33 @@ function fillSelect(select, values, preferred) {
     }
 }
 
+function syncPanelHeights() {
+    const sidebar = document.querySelector(".sidebar");
+    const batchPanel = document.querySelector("#batchTab .batch-panel");
+    const canvasPanel = document.querySelector(".canvas-panel");
+    const resultPanel = document.querySelector(".result-panel");
+
+    if (window.innerWidth <= 1200) {
+        [canvasPanel, resultPanel, batchPanel].forEach((panel) => {
+            if (panel) {
+                panel.style.minHeight = "";
+            }
+        });
+        return;
+    }
+
+    if (!sidebar) {
+        return;
+    }
+
+    const sidebarHeight = sidebar.getBoundingClientRect().height;
+    [canvasPanel, resultPanel, batchPanel].forEach((panel) => {
+        if (panel) {
+            panel.style.minHeight = `${Math.ceil(sidebarHeight)}px`;
+        }
+    });
+}
+
 function setLoading(button, loading, loadingText) {
     if (!button.dataset.originalText) {
         button.dataset.originalText = button.textContent;
@@ -78,6 +111,15 @@ function setLoading(button, loading, loadingText) {
 function applyResult(payload) {
     $("resultImage").src = payload.result_image;
     $("resultStage").classList.remove("empty");
+    const debugStage = $("debugStage");
+    const debugImage = $("debugImage");
+    if (payload.debug_image) {
+        debugImage.src = payload.debug_image;
+        debugStage.classList.remove("empty");
+    } else {
+        debugImage.removeAttribute("src");
+        debugStage.classList.add("empty");
+    }
     $("heroReadingLabel").textContent = payload.ocr_error ? "OCR失败" : "读数结果";
     $("heroReading").textContent = payload.ocr_error ? "OCR失败" : payload.reading;
     $("heroRatio").textContent = payload.ratio;
@@ -92,6 +134,10 @@ function setInputPreview(file) {
     const preview = $("uploadPreviewState");
     const image = $("inputPreviewImage");
     const name = $("inputPreviewName");
+    if (state.currentFilePreviewUrl) {
+        URL.revokeObjectURL(state.currentFilePreviewUrl);
+        state.currentFilePreviewUrl = null;
+    }
     if (!file) {
         empty.classList.remove("hidden");
         preview.classList.add("hidden");
@@ -99,8 +145,8 @@ function setInputPreview(file) {
         name.textContent = "";
         return;
     }
-    const fileUrl = URL.createObjectURL(file);
-    image.src = fileUrl;
+    state.currentFilePreviewUrl = URL.createObjectURL(file);
+    image.src = state.currentFilePreviewUrl;
     name.textContent = file.name;
     empty.classList.add("hidden");
     preview.classList.remove("hidden");
@@ -121,11 +167,23 @@ function setDownloadLink(id, href) {
 function openImageModal(src) {
     $("imageModalImg").src = src;
     $("imageModal").classList.remove("hidden");
+    document.body.classList.add("modal-open");
 }
 
 function closeImageModal() {
     $("imageModal").classList.add("hidden");
     $("imageModalImg").removeAttribute("src");
+    document.body.classList.remove("modal-open");
+}
+
+function scrollBatchTableToTop() {
+    const wrap = $("batchTableWrap");
+    if (!wrap) {
+        return;
+    }
+    window.requestAnimationFrame(() => {
+        wrap.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
 }
 
 function renderPagination(totalPages) {
@@ -147,14 +205,14 @@ function renderPagination(totalPages) {
         if (state.batchPage > 1) {
             state.batchPage -= 1;
             renderBatchTable();
-            $("batchTableWrap").scrollIntoView({ behavior: "smooth", block: "start" });
+            scrollBatchTableToTop();
         }
     });
     $("nextPageBtn").addEventListener("click", () => {
         if (state.batchPage < totalPages) {
             state.batchPage += 1;
             renderBatchTable();
-            $("batchTableWrap").scrollIntoView({ behavior: "smooth", block: "start" });
+            scrollBatchTableToTop();
         }
     });
 }
@@ -173,6 +231,46 @@ function renderBatchTable() {
     state.batchPage = Math.min(state.batchPage, totalPages);
     const start = (state.batchPage - 1) * state.pageSize;
     const pageRows = rows.slice(start, start + state.pageSize);
+    const isMobile = window.innerWidth <= 560;
+
+    if (isMobile) {
+        const cards = pageRows.map((row) => `
+            <article class="mobile-batch-card">
+                <div class="mobile-batch-thumb">
+                    <img class="thumb-action" data-fullsrc="${row.full_image || row.thumbnail}" src="${row.thumbnail}" alt="${row.filename}">
+                    <span>${row.filename}</span>
+                </div>
+                <div class="mobile-batch-metrics">
+                    <div class="mobile-batch-item">
+                        <label>起始值</label>
+                        <strong>${row.start}</strong>
+                    </div>
+                    <div class="mobile-batch-item">
+                        <label>结束值</label>
+                        <strong>${row.end}</strong>
+                    </div>
+                    <div class="mobile-batch-item">
+                        <label>读数 Ratio</label>
+                        <strong>${row.ratio}</strong>
+                    </div>
+                    <div class="mobile-batch-item full">
+                        <label>读数值</label>
+                        <strong>${row.reading}</strong>
+                    </div>
+                </div>
+            </article>
+        `).join("");
+
+        wrap.className = "table-wrap";
+        wrap.innerHTML = `<div class="mobile-batch-list">${cards}</div>`;
+
+        wrap.querySelectorAll(".thumb-action").forEach((image) => {
+            image.addEventListener("click", () => openImageModal(image.dataset.fullsrc));
+        });
+
+        renderPagination(totalPages);
+        return;
+    }
 
     const body = pageRows.map((row) => `
         <tr>
@@ -233,7 +331,7 @@ async function loadModels() {
     const button = $("loadModelsBtn");
     setLoading(button, true, "加载中...");
     try {
-        await request("/api/models/load", {
+        const payload = await request("/api/models/load", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -243,7 +341,11 @@ async function loadModels() {
             })
         });
         setModelStatus(true);
-        showToast("模型加载完成");
+        if (payload.config_mode === "matched") {
+            showToast(`模型加载完成，已匹配配置: ${payload.config_path}`);
+        } else {
+            showToast("模型加载完成，未找到同名配置，已使用默认配置");
+        }
     } catch (error) {
         showToast(error.message, true);
     } finally {
@@ -331,16 +433,42 @@ async function pollBatchJob(jobId, button) {
         const payload = await request(`/api/batch/jobs/${jobId}`);
         updateBatchProgress(payload.progress.completed, payload.progress.total);
 
+        if ((payload.rows || []).length) {
+            state.batchRows = payload.rows || [];
+            if (!state.batchRowsShown) {
+                state.batchPage = 1;
+                renderBatchTable();
+                scrollBatchTableToTop();
+                state.batchRowsShown = true;
+            }
+        }
+
+        if (payload.status === "packaging") {
+            button.disabled = true;
+            button.textContent = "打包中...";
+            if (!state.batchPackagingNoticeShown) {
+                showToast("推理已完成，正在打包下载文件");
+                state.batchPackagingNoticeShown = true;
+            }
+            state.batchPollTimer = window.setTimeout(() => pollBatchJob(jobId, button), 600);
+            return;
+        }
+
         if (payload.status === "completed") {
             state.batchRows = payload.rows || [];
-            state.batchPage = 1;
-            renderBatchTable();
+            if (!state.batchRowsShown) {
+                state.batchPage = 1;
+                renderBatchTable();
+                scrollBatchTableToTop();
+            }
             setDownloadLink("downloadZip", payload.downloads.zip);
             setDownloadLink("downloadCsv", payload.downloads.csv);
             setLoading(button, false, "");
             showToast(`批量推理完成，共 ${payload.rows.length} 张`);
             state.currentBatchJobId = null;
             state.batchPollTimer = null;
+            state.batchRowsShown = false;
+            state.batchPackagingNoticeShown = false;
             return;
         }
 
@@ -349,6 +477,8 @@ async function pollBatchJob(jobId, button) {
             showToast(payload.error || "批量推理失败", true);
             state.currentBatchJobId = null;
             state.batchPollTimer = null;
+            state.batchRowsShown = false;
+            state.batchPackagingNoticeShown = false;
             return;
         }
 
@@ -370,6 +500,8 @@ async function runBatch() {
 
     const button = $("runBatchBtn");
     state.batchRows = [];
+    state.batchRowsShown = false;
+    state.batchPackagingNoticeShown = false;
     renderBatchTable();
     setDownloadLink("downloadZip", "");
     setDownloadLink("downloadCsv", "");
@@ -395,13 +527,19 @@ async function runBatch() {
 }
 
 function bindTabs() {
-    document.querySelectorAll(".tab-button").forEach((button) => {
-        button.addEventListener("click", () => {
-            document.querySelectorAll(".tab-button").forEach((item) => item.classList.remove("active"));
-            document.querySelectorAll(".tab-panel").forEach((panel) => panel.classList.remove("active"));
-            button.classList.add("active");
-            $(button.dataset.tab).classList.add("active");
+    const buttons = Array.from(document.querySelectorAll(".tab-button"));
+    const setActiveTab = (tabId) => {
+        buttons.forEach((item) => {
+            item.classList.toggle("active", item.dataset.tab === tabId);
         });
+        document.querySelectorAll(".tab-panel").forEach((panel) => {
+            panel.classList.toggle("active", panel.id === tabId);
+        });
+        window.requestAnimationFrame(syncPanelHeights);
+    };
+
+    buttons.forEach((button) => {
+        button.addEventListener("click", () => setActiveTab(button.dataset.tab));
     });
 }
 
@@ -411,6 +549,12 @@ function bindEvents() {
     $("runSingleBtn").addEventListener("click", runSingleInference);
     $("runBatchBtn").addEventListener("click", runBatch);
     $("resultImage").addEventListener("click", handleResultClick);
+    $("debugImage").addEventListener("click", () => {
+        if ($("debugStage").classList.contains("empty") || !$("debugImage").src) {
+            return;
+        }
+        openImageModal($("debugImage").src);
+    });
     $("startValueInput").addEventListener("change", (event) => updateValue("start", event.target.value));
     $("endValueInput").addEventListener("change", (event) => updateValue("end", event.target.value));
     $("imageModalClose").addEventListener("click", closeImageModal);
@@ -425,4 +569,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     } catch (error) {
         showToast(error.message, true);
     }
+    window.requestAnimationFrame(syncPanelHeights);
+    window.addEventListener("resize", () => {
+        syncPanelHeights();
+        if (state.batchRows.length) {
+            renderBatchTable();
+        }
+    });
 });

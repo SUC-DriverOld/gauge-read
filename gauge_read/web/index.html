@@ -7,20 +7,26 @@
     <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+    <section class="hero-band">
+        <div class="hero-band-inner">
+            <p class="eyebrow">Precision Gauge Reading System</p>
+            <h1>模拟仪表读数系统</h1>
+            <p class="hero-summary">面向复杂环境中模拟仪表图像的智能识别与读数修正一体化综合解决方案</p>
+        </div>
+    </section>
+
+    <section class="page-tabs-shell">
+        <div class="page-tabs">
+            <button class="tab-button active" data-tab="singleTab">单图推理</button>
+            <button class="tab-button" data-tab="batchTab">批量推理</button>
+        </div>
+    </section>
+
     <div class="app-shell">
         <aside class="sidebar">
-            <div class="brand">
-                <div class="brand-mark">GR</div>
-                <div>
-                    <p class="eyebrow">Gauge Read</p>
-                    <h1>模拟仪表读数系统</h1>
-                </div>
-            </div>
-
-            <section class="panel glass">
+            <section class="panel panel-light">
                 <div class="panel-header">
                     <h2>模型控制台</h2>
-                    <span id="modelStatus" class="status-badge idle">未加载</span>
                 </div>
                 <label class="field">
                     <span>仪表读数模型</span>
@@ -37,7 +43,7 @@
                 <button id="loadModelsBtn" class="button primary">加载模型</button>
             </section>
 
-            <section class="panel glass">
+            <section class="panel panel-light">
                 <div class="panel-header">
                     <h2>使用说明</h2>
                 </div>
@@ -46,20 +52,11 @@
         </aside>
 
         <main class="main-content">
-            <section class="hero">
-                <div></div>
-            </section>
-
-            <section class="tabs">
-                <button class="tab-button active" data-tab="singleTab">单图推理</button>
-                <button class="tab-button" data-tab="batchTab">批量推理</button>
-            </section>
-
             <section id="toast" class="toast hidden"></section>
 
             <section id="singleTab" class="tab-panel active">
                 <div class="grid-two">
-                    <section class="panel canvas-panel">
+                    <section class="panel panel-light canvas-panel">
                         <div class="panel-header">
                             <h3>输入设置</h3>
                         </div>
@@ -88,9 +85,14 @@
                             </label>
                         </div>
                         <button id="runSingleBtn" class="button primary">开始推理</button>
+                        <div id="debugStage" class="debug-stage empty">
+                            <img id="debugImage" alt="区域划分调试图">
+                            <div id="debugPlaceholder" class="placeholder-copy">区域划分图（推理完成后显示）</div>
+                        </div>
+                        <p class="debug-caption">区域划分图</p>
                     </section>
 
-                    <section class="panel result-panel">
+                    <section class="panel panel-light result-panel">
                         <div class="panel-header">
                             <h3>结果与修正</h3>
                             <span class="hint">选择修正模式后点击图片</span>
@@ -132,7 +134,7 @@
             </section>
 
             <section id="batchTab" class="tab-panel">
-                <div class="panel batch-panel">
+                <div class="panel panel-light batch-panel">
                     <div class="panel-header">
                         <h3>批量推理</h3>
                         <span class="hint">输入图片文件夹路径后即可处理</span>

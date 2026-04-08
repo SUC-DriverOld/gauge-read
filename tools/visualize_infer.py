@@ -134,6 +134,11 @@ def main(args, cfg):
                 std_points,
                 getattr(stn_transformer, "last_center", predicted_center),
             )
+            if meter.last_debug_image is not None:
+                cv2.imshow("debug_visualization", meter.last_debug_image)
+                cv2.waitKey(0)
+            else:
+                logger.warning("Debug visualization was not generated for image %s", index)
 
     logger.info("Offline inference finished for directory %s", predict_dir)
 

@@ -8,7 +8,9 @@ import sys
 import tempfile
 import threading
 import uuid
+import webbrowser
 import zipfile
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
@@ -79,6 +81,7 @@ class NativeGaugeApp(GaugeApp):
             self.current_start_value = float(text)
         except ValueError:
             return None, "起始值输入无效"
+        self.current_ocr_error = False
         return self.draw_visualization(), self.recalculate()
 
     def update_end_val(self, text):
@@ -91,6 +94,7 @@ class NativeGaugeApp(GaugeApp):
             self.current_end_value = float(text)
         except ValueError:
             return None, "结束值输入无效"
+        self.current_ocr_error = False
         return self.draw_visualization(), self.recalculate()
 
 
@@ -197,7 +201,7 @@ cleanup_runtime_cache()
 def get_cfg():
     global _cfg
     if _cfg is None:
-        resolved = os.environ.get("GAUGE_CONFIG", AttrDict.DEFAULT_CONFIG_PATH)
+        resolved = AttrDict.DEFAULT_CONFIG_PATH
         _cfg = AttrDict(resolved)
         logger.info("Web default configuration loaded: %s", resolved)
     return _cfg
@@ -236,6 +240,43 @@ def default_model_options():
     }
 
 
+def resolve_reader_config_path(model_path):
+    if not model_path:
+        return None
+
+    model_file = Path(model_path)
+    candidate = model_file.with_suffix(".yaml")
+    if candidate.is_file():
+        return str(candidate)
+    return None
+
+
+def build_cfg_for_reader_model(model_path=None, stn_path=None, yolo_path=None):
+    config_path = resolve_reader_config_path(model_path)
+    if config_path:
+        cfg = AttrDict(config_path)
+        logger.info("Web config matched reader model: %s -> %s", model_path, config_path)
+    else:
+        config_path = AttrDict.DEFAULT_CONFIG_PATH
+        cfg = AttrDict(config_path)
+        logger.info("Web config fallback to default for reader model %s: %s", model_path, config_path)
+
+    if model_path:
+        cfg.predict.model_path = model_path
+    if stn_path is not None:
+        cfg.predict.stn_model_path = stn_path
+    if yolo_path is not None:
+        cfg.predict.yolo_model_path = yolo_path
+    return cfg, config_path
+
+
+def reset_app_logic(cfg):
+    global _cfg, _app_logic
+    _cfg = cfg
+    _app_logic = NativeGaugeApp(cfg)
+    return _app_logic
+
+
 def image_to_png_bytes(image):
     image_np = np.asarray(image)
     if image_np.ndim == 2:
@@ -267,12 +308,19 @@ def format_metric(value):
     return str(value)
 
 
+def build_timestamped_filename(prefix, suffix):
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    return f"{prefix}_{timestamp}.{suffix}"
+
+
 def state_payload(result_image=None, reading=None):
     logic = get_app_logic()
     image = result_image if result_image is not None else logic.draw_visualization()
     reading_value = logic.current_value if reading is None else reading
+    debug_image = getattr(logic, "current_debug_image", None)
     return {
         "result_image": image_to_data_url(image),
+        "debug_image": image_to_data_url(debug_image) if debug_image is not None else None,
         "reading": format_metric(reading_value),
         "start_value": format_metric(logic.current_start_value),
         "end_value": format_metric(logic.current_end_value),
@@ -409,13 +457,23 @@ def run_batch_job(job_id, input_dir, use_stn, use_yolo):
                     )
                 _batch_jobs[job_id]["progress"]["completed"] = index
 
+        _batch_jobs[job_id]["status"] = "packaging"
+        _batch_jobs[job_id]["rows"] = [{k: v for k, v in row.items() if k != "download_image"} for row in rows]
+
         zip_path = create_zip_file(rows)
         csv_path = create_csv_file(rows)
         _batch_jobs[job_id]["status"] = "completed"
-        _batch_jobs[job_id]["rows"] = [{k: v for k, v in row.items() if k != "download_image"} for row in rows]
         _batch_jobs[job_id]["downloads"] = {
-            "zip": register_download(zip_path, "gauge_batch_images.zip", "application/zip"),
-            "csv": register_download(csv_path, "gauge_batch_results.csv", "text/csv"),
+            "zip": register_download(
+                zip_path,
+                build_timestamped_filename("gauge_batch_images", "zip"),
+                "application/zip",
+            ),
+            "csv": register_download(
+                csv_path,
+                build_timestamped_filename("gauge_batch_results", "csv"),
+                "text/csv",
+            ),
         }
     except Exception as exc:
         _batch_jobs[job_id]["status"] = "failed"
@@ -458,12 +516,21 @@ def bootstrap():
 @app.post("/api/models/load")
 def load_models(payload: LoadModelsPayload):
     with _infer_lock:
-        logic = get_app_logic()
         try:
+            cfg, resolved_config_path = build_cfg_for_reader_model(
+                model_path=payload.model_path,
+                stn_path=payload.stn_path,
+                yolo_path=payload.yolo_path,
+            )
+            logic = reset_app_logic(cfg)
             logic.load_models(payload.model_path, payload.stn_path, payload.yolo_path)
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-    return {"message": "模型加载完成"}
+    return {
+        "message": "模型加载完成",
+        "config_path": resolved_config_path,
+        "config_mode": "matched" if resolve_reader_config_path(payload.model_path) else "default",
+    }
 
 
 @app.post("/api/infer")
@@ -563,14 +630,29 @@ def download(file_id: str):
         raise HTTPException(status_code=404, detail="下载文件不存在或已过期")
     return FileResponse(payload["path"], media_type=payload["media_type"], filename=payload["filename"])
 
+def run_server(host="127.0.0.1", port=11451, open_browser=True):
+    cleanup_runtime_cache()
+    get_cfg().print_config()
+    web_url = f"http://{host}:{port}/"
 
-if __name__ == "__main__":
+    if open_browser:
+        def open_browser_later():
+            try:
+                webbrowser.open(web_url)
+            except Exception as exc:
+                logger.warning("Failed to open browser automatically: %s", exc)
+
+        threading.Timer(1.0, open_browser_later).start()
+
+    uvicorn.run(app, host=host, port=port)
+
+
+def main(argv=None):
     parser = argparse.ArgumentParser(description="Gauge Read Native Web")
-    parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
     parser.add_argument("--host", type=str, default="127.0.0.1", help="Web Host")
     parser.add_argument("--port", type=int, default=11451, help="Web Port")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.debug:
         import logging
@@ -578,9 +660,9 @@ if __name__ == "__main__":
         logger.console_handler.setLevel(logging.DEBUG)
         logger.info("Native web console log level set to DEBUG")
 
-    if args.config:
-        os.environ["GAUGE_CONFIG"] = args.config
+    run_server(host=args.host, port=args.port, open_browser=True)
+    return 0
 
-    cleanup_runtime_cache()
-    get_cfg().print_config()
-    uvicorn.run(app, host=args.host, port=args.port)
+
+if __name__ == "__main__":
+    raise SystemExit(main())

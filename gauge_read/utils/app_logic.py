@@ -23,10 +23,12 @@ class GaugeApp:
         self.detector = None
         self.converter = StringLabelConverter()
         self.meter_reader = MeterReader()
+        self.debug_meter_reader = MeterReader(debug=True)
         self.transform = BaseTransform(size=cfg.model.test_size, mean=cfg.model.means, std=cfg.model.stds)
         self.yolo_detector = None
 
         self.current_image = None
+        self.current_debug_image = None
         self.current_std_points = []
         self.current_pointer_line = None
         self.current_start_value = 0.0
@@ -52,6 +54,7 @@ class GaugeApp:
         self.detector = other.detector
         self.converter = other.converter
         self.meter_reader = other.meter_reader
+        self.debug_meter_reader = other.debug_meter_reader
         self.transform = other.transform
         self.yolo_detector = other.yolo_detector
         self.yolo_weights_path = other.yolo_weights_path
@@ -202,6 +205,8 @@ class GaugeApp:
             return None, f"Inference error: {exc}", 0.0, 0.0
 
         pointer_pred = output["pointer"]
+        dail_pred = output["dail"]
+        text_pred = output["text"]
         preds = output["reco"]
         std_points = output["std"]
 
@@ -222,6 +227,7 @@ class GaugeApp:
         self.current_pointer_line = pointer_line
         self.current_std_points = final_std
         self.current_center = predicted_center
+        self.current_debug_image = None
         self.current_start_value = 0.0
         ocr_error = False
 
@@ -240,6 +246,23 @@ class GaugeApp:
             self.current_end_value = 0.0
             ocr_error = True
             logger.warning("OCR transcript could not be converted to numeric value: %s", pred_transcripts)
+
+        try:
+            _ = self.debug_meter_reader(
+                img_show.copy(),
+                pointer_pred,
+                dail_pred,
+                text_pred,
+                [pred_transcripts] if isinstance(pred_transcripts, str) else pred_transcripts,
+                final_std,
+                predicted_center,
+            )
+            debug_image = self.debug_meter_reader.last_debug_image
+            if debug_image is not None:
+                self.current_debug_image = cv2.cvtColor(debug_image, cv2.COLOR_BGR2RGB)
+        except Exception:
+            logger.exception("Failed to generate single-image debug visualization")
+            self.current_debug_image = None
 
         self.current_ocr_error = ocr_error
         value = self.recalculate(ocr_error)

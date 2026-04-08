@@ -49,24 +49,17 @@ Gauge Read is a comprehensive solution for reading pointer meters in complex env
         train-stn Train the STN correction model
         valid     Run validation on a labeled dataset
         infer     Run single-image CLI inference
-        web       Launch the native HTML/CSS/JS Web UI
-        webui     Launch the Gradio WebUI
-        gui       Launch the desktop GUI wrapper
+        web       Launch the native WebUI
+        gui       Launch the desktop GUI wrapper for the WebUI
 
     options:
     -h, --help            show this help message and exit
     ```
 
-    To launch the native WebUI, with `config.yaml` simply run:
+    To launch the WebUI, with `config.yaml` simply run:
 
     ```bash
     gaugeread web -c config.yaml
-    ```
-
-    To launch the Gradio WebUI, with `config.yaml` simply run:
-
-    ```bash
-    gaugeread webui -c config.yaml
     ```
 
 ## Training and Validation
