@@ -1,11 +1,12 @@
 import os
 import yaml
+import torch
 
 
 class AttrDict(dict):
     DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "configs", "config.yaml")
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, init_device=True, **kwargs):
         dict.__init__(self)
 
         if len(args) > 1:
@@ -23,6 +24,9 @@ class AttrDict(dict):
         for k, v in kwargs.items():
             self[k] = self._to_attr_dict(v)
 
+        if init_device:
+            self.init_device()
+
     @staticmethod
     def _load_yaml(config_path):
         if not os.path.exists(config_path):
@@ -39,7 +43,7 @@ class AttrDict(dict):
     @classmethod
     def _to_attr_dict(cls, value):
         if isinstance(value, dict):
-            node = cls()
+            node = cls(init_device=False)
             for k, v in value.items():
                 node[k] = cls._to_attr_dict(v)
             return node
@@ -87,3 +91,14 @@ class AttrDict(dict):
         for i, (k, v) in enumerate(items):
             print(f"\033[0;33m{k}\033[0m: {v}, ", end="\n" if i % 5 == 4 else "")
         print()
+
+    def init_device(self):
+        if self.training.device == "auto" or self.stn_training.device == "auto":
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif torch.backends.mps.is_available():
+                device = "mps"
+            else:
+                device = "cpu"
+            self.training.device = device
+            self.stn_training.device = device
