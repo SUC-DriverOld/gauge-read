@@ -45,15 +45,6 @@ async function request(url, options = {}) {
     return response.json();
 }
 
-function setModelStatus(loaded) {
-    const badge = $("modelStatus");
-    if (!badge) {
-        return;
-    }
-    badge.textContent = loaded ? "模型已加载" : "模型未加载";
-    badge.className = `status-badge ${loaded ? "ready" : "idle"}`;
-}
-
 function fillSelect(select, values, preferred) {
     select.innerHTML = "";
     values.forEach((value) => {
@@ -166,6 +157,9 @@ function setDownloadLink(id, href) {
 }
 
 function openImageModal(src) {
+    if (!src) {
+        return;
+    }
     $("imageModalImg").src = src;
     $("imageModal").classList.remove("hidden");
     document.body.classList.add("modal-open");
@@ -325,7 +319,6 @@ async function bootstrap() {
     fillSelect($("stnSelect"), payload.stn_options, payload.defaults.stn_path);
     fillSelect($("yoloSelect"), payload.yolo_options, payload.defaults.yolo_path);
     $("instructionList").innerHTML = payload.instructions.map((item) => `<li>${item}</li>`).join("");
-    setModelStatus(payload.loaded);
 }
 
 async function loadModels() {
@@ -341,7 +334,6 @@ async function loadModels() {
                 yolo_path: $("yoloSelect").value
             })
         });
-        setModelStatus(true);
         if (payload.config_mode === "matched") {
             showToast(`模型加载完成，已匹配配置: ${payload.config_path}`);
         } else {
@@ -529,6 +521,7 @@ async function runBatch() {
 
 function bindTabs() {
     const buttons = Array.from(document.querySelectorAll(".tab-button"));
+
     const setActiveTab = (tabId) => {
         buttons.forEach((item) => {
             item.classList.toggle("active", item.dataset.tab === tabId);
