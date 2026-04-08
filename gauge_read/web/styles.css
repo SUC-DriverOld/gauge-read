@@ -165,13 +165,6 @@ select {
     font-weight: 600;
 }
 
-.field-label-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-}
-
 .field input,
 .field select {
     width: 100%;
@@ -331,6 +324,16 @@ select {
     background: #f2f2f4;
 }
 
+.upload-zone.dragover {
+    border-color: rgba(0, 113, 227, 0.48);
+    background: rgba(0, 113, 227, 0.06);
+    box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.12);
+}
+
+.upload-zone.loading {
+    opacity: 0.72;
+}
+
 .upload-zone span {
     font-family: "SF Pro Display", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
     font-size: 28px;
@@ -382,9 +385,34 @@ select {
     letter-spacing: -0.12px;
 }
 
+.batch-upload-zone {
+    min-height: 220px;
+}
+
+.batch-upload-preview-state {
+    display: grid;
+    gap: 8px;
+    justify-items: center;
+    text-align: center;
+}
+
+.batch-upload-preview-state strong {
+    font-size: 22px;
+    line-height: 1.2;
+    letter-spacing: -0.28px;
+    color: var(--text-dark);
+}
+
+.batch-upload-preview-state small {
+    font-size: 13px;
+    line-height: 1.38;
+    letter-spacing: -0.16px;
+    color: var(--text-tertiary);
+}
+
 .inline-controls,
 .batch-controls,
-.download-row,
+.batch-actions,
 .value-grid {
     display: flex;
     gap: 14px;
@@ -393,6 +421,10 @@ select {
 
 .inline-controls {
     margin: 18px 0 20px;
+    display: grid;
+    grid-template-columns: 1fr;
+    justify-content: stretch;
+    justify-items: center;
 }
 
 .check {
@@ -412,6 +444,12 @@ select {
 
 .check input {
     accent-color: var(--apple-blue);
+}
+
+.inline-controls .check {
+    width: 100%;
+    max-width: 100%;
+    justify-content: center;
 }
 
 .single-metrics {
@@ -451,6 +489,7 @@ select {
     flex-wrap: wrap;
     gap: 10px;
     margin-bottom: 20px;
+    justify-content: center;
 }
 
 .mode-pill {
@@ -566,36 +605,36 @@ select {
 }
 
 .batch-controls {
-    align-items: flex-end;
-    flex-wrap: wrap;
+    margin-bottom: 20px;
 }
 
-.batch-controls .field {
-    flex: 1 1 auto;
-    margin-bottom: 0;
+.batch-upload-zone {
+    flex: 1 1 100%;
 }
 
-#uploadBatchImagesBtn {
-    min-width: 140px;
-}
-
-.batch-upload-hint {
-    display: inline-flex;
+.batch-actions {
     align-items: center;
-    min-height: 0;
-    font-size: 14px;
-    line-height: 1.29;
-    letter-spacing: -0.224px;
-    color: var(--text-tertiary);
-    font-weight: 500;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.batch-actions .button,
+.batch-actions .check {
+    flex: 0 0 auto;
+}
+
+.batch-actions .button.secondary {
+    background: #ffffff;
+    color: var(--text-dark);
+    border-color: var(--line-light);
+}
+
+.batch-actions .button.secondary:hover {
+    background: #f6f6f8;
 }
 
 #runBatchBtn {
-    min-width: 148px;
-}
-
-.download-row {
-    margin: 20px 0;
+    min-width: 196px;
 }
 
 .hint {
@@ -925,20 +964,12 @@ select {
         gap: 8px;
     }
 
-    .batch-controls {
-        flex-wrap: wrap;
+    .batch-actions {
+        justify-content: stretch;
     }
 
-    .batch-controls .field,
-    #runBatchBtn {
-        width: 100%;
-    }
-
-    .download-row {
-        flex-direction: column;
-    }
-
-    .download-row .button {
+    #runBatchBtn,
+    .batch-actions .button {
         width: 100%;
     }
 
@@ -1027,7 +1058,7 @@ select {
 
     .inline-controls,
     .batch-controls,
-    .download-row,
+    .batch-actions,
     .value-grid {
         gap: 12px;
     }
@@ -1035,7 +1066,9 @@ select {
     .inline-controls {
         margin: 16px 0 18px;
         display: grid;
-        grid-template-columns: repeat(2, minmax(0, 1fr));
+        grid-template-columns: 1fr;
+        justify-content: stretch;
+        justify-items: center;
     }
 
     .check {
@@ -1076,6 +1109,7 @@ select {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
+        justify-items: center;
     }
 
     .mode-pill span {
@@ -1122,35 +1156,21 @@ select {
     .batch-controls {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        align-items: end;
     }
 
-    .batch-controls .field.stretch {
+    .batch-upload-zone,
+    .batch-actions {
         grid-column: 1 / -1;
     }
 
-    #uploadBatchImagesBtn {
-        width: 100%;
-    }
-
-    .field-label-inline {
-        gap: 8px;
-    }
-
-    #runBatchBtn {
-        min-width: 0;
-        width: 100%;
-        grid-column: 1 / -1;
-    }
-
-    .download-row {
+    .batch-actions {
         display: grid;
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        align-items: center;
+        justify-content: stretch;
     }
 
-    .download-row .button {
-        width: 100%;
+    .batch-actions #runBatchBtn {
+        grid-column: 1 / -1;
     }
 
     .batch-progress {
@@ -1254,26 +1274,29 @@ select {
     }
 
     .mode-grid,
-    .inline-controls,
-    .download-row,
+    .batch-actions,
     .value-grid,
     .batch-controls,
     .mobile-batch-metrics {
         grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
-    .batch-controls .field.stretch {
+    .inline-controls {
+        grid-template-columns: 1fr;
+    }
+
+    .batch-upload-zone,
+    .batch-actions {
         grid-column: 1 / -1;
     }
 
-    #uploadBatchImagesBtn,
-    #runBatchBtn {
+    .batch-actions #runBatchBtn {
         grid-column: 1 / -1;
     }
 
     .mode-pill span,
     .check,
-    .download-row .button {
+    .batch-actions .button {
         min-height: 40px;
     }
 

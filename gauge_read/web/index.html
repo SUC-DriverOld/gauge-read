@@ -55,16 +55,16 @@
             <section id="toast" class="toast hidden" aria-live="polite"></section>
 
             <section id="singleTab" class="tab-panel active">
-                <div class="grid-two">
+                    <div class="grid-two">
                     <section class="panel panel-light canvas-panel">
                         <div class="panel-header">
                             <h3>输入设置</h3>
                         </div>
-                        <label class="upload-zone" for="imageInput">
+                        <label id="singleUploadZone" class="upload-zone" for="imageInput">
                             <input id="imageInput" type="file" accept="image/*" hidden>
                             <div id="uploadEmptyState">
                                 <span>点击上传仪表图片</span>
-                                <small id="uploadHint">支持 JPG / PNG / BMP / WEBP</small>
+                                <small id="uploadHint">支持 JPG / PNG / BMP / WEBP，也可直接拖拽上传</small>
                             </div>
                             <div id="uploadPreviewState" class="upload-preview-state hidden">
                                 <img id="inputPreviewImage" alt="输入图片缩略图">
@@ -137,18 +137,22 @@
                 <div class="panel panel-light batch-panel">
                     <div class="panel-header">
                         <h3>批量推理</h3>
-                        <span class="hint">输入图片文件夹路径或选择批量图片后即可处理</span>
+                        <span class="hint">支持拖拽或点击上传多张图片后批量处理</span>
                     </div>
                     <div class="batch-controls">
-                        <label class="field stretch">
-                            <span class="field-label-inline">
-                                <span>图片文件夹</span>
-                                <span id="batchUploadHint" class="batch-upload-hint">未选择图片</span>
-                            </span>
-                            <input id="batchDirInput" type="text" value="datas/test" placeholder="请输入待批量推理的图片文件夹路径">
-                        </label>
                         <input id="batchImagesInput" type="file" accept="image/*" multiple hidden>
-                        <button id="uploadBatchImagesBtn" class="button secondary" type="button">上传批量图片</button>
+                        <label id="batchUploadZone" class="upload-zone batch-upload-zone" for="batchImagesInput">
+                            <div id="batchUploadEmptyState">
+                                <span>点击上传批量图片</span><br>
+                                <small>支持 JPG / PNG / BMP / WEBP，也可直接拖拽多张图片上传</small>
+                            </div>
+                            <div id="batchUploadPreviewState" class="batch-upload-preview-state hidden">
+                                <strong id="batchUploadCount">已上传 0 张图片</strong>
+                                <small>再次点击或拖拽可重新选择图片</small>
+                            </div>
+                        </label>
+                    </div>
+                    <div class="batch-actions">
                         <label class="check">
                             <input id="batchUseStn" type="checkbox" checked>
                             <span>启用 STN</span>
@@ -158,8 +162,6 @@
                             <span>启用 YOLO</span>
                         </label>
                         <button id="runBatchBtn" class="button primary">开始批量推理</button>
-                    </div>
-                    <div class="download-row">
                         <a id="downloadZip" class="button secondary disabled" href="#" aria-disabled="true">下载结果图 ZIP</a>
                         <a id="downloadCsv" class="button secondary disabled" href="#" aria-disabled="true">下载结果 CSV</a>
                     </div>

@@ -1,6 +1,8 @@
 const state = {
     currentFile: null,
     currentFilePreviewUrl: null,
+    batchUploadDir: "",
+    batchUploadCount: 0,
     resultNaturalWidth: 0,
     resultNaturalHeight: 0,
     toastTimer: null,
@@ -142,6 +144,16 @@ function setInputPreview(file) {
     name.textContent = file.name;
     empty.classList.add("hidden");
     preview.classList.remove("hidden");
+}
+
+function setBatchUploadPreview(count) {
+    const empty = $("batchUploadEmptyState");
+    const preview = $("batchUploadPreviewState");
+    const countLabel = $("batchUploadCount");
+    const hasFiles = count > 0;
+    countLabel.textContent = hasFiles ? `已上传 ${count} 张图片` : "已上传 0 张图片";
+    empty.classList.toggle("hidden", hasFiles);
+    preview.classList.toggle("hidden", !hasFiles);
 }
 
 function getCurrentEditMode() {
@@ -346,36 +358,48 @@ async function loadModels() {
     }
 }
 
-function onImageSelected(event) {
-    const [file] = event.target.files || [];
+function applySingleFile(file) {
     state.currentFile = file || null;
-    $("uploadHint").textContent = file ? `已选择: ${file.name}` : "支持 JPG / PNG / BMP / WEBP";
+    $("uploadHint").textContent = file ? `已选择: ${file.name}` : "支持 JPG / PNG / BMP / WEBP，也可直接拖拽上传";
     setInputPreview(state.currentFile);
 }
 
-async function onBatchImagesSelected(event) {
-    const files = Array.from(event.target.files || []);
-    const button = $("uploadBatchImagesBtn");
-    const hint = $("batchUploadHint");
+function onImageSelected(event) {
+    const [file] = event.target.files || [];
+    applySingleFile(file || null);
+}
+
+async function uploadBatchFiles(files) {
     if (!files.length) {
-        hint.textContent = "未选择图片";
+        state.batchUploadDir = "";
+        state.batchUploadCount = 0;
+        setBatchUploadPreview(0);
         return;
     }
 
-    setLoading(button, true, "上传中...");
+    const uploadZone = $("batchUploadZone");
+    uploadZone.classList.add("loading");
     try {
         const formData = new FormData();
         files.forEach((file) => formData.append("images", file));
         const payload = await request("/api/batch/uploads", { method: "POST", body: formData });
-        $("batchDirInput").value = payload.input_dir;
-        hint.textContent = `已选择 ${payload.count} 张图片`;
-        showToast(`已上传 ${payload.count} 张图片，批量路径已自动填入`);
+        state.batchUploadDir = payload.input_dir;
+        state.batchUploadCount = payload.count;
+        setBatchUploadPreview(payload.count);
+        showToast(`已上传 ${payload.count} 张图片`);
     } catch (error) {
-        hint.textContent = "未选择图片";
         showToast(error.message, true);
     } finally {
+        uploadZone.classList.remove("loading");
+    }
+}
+
+async function onBatchImagesSelected(event) {
+    const files = Array.from(event.target.files || []);
+    try {
+        await uploadBatchFiles(files);
+    } finally {
         event.target.value = "";
-        setLoading(button, false, "");
     }
 }
 
@@ -511,9 +535,8 @@ async function pollBatchJob(jobId, button) {
 }
 
 async function runBatch() {
-    const inputDir = $("batchDirInput").value.trim();
-    if (!inputDir) {
-        showToast("请输入图片文件夹路径", true);
+    if (!state.batchUploadDir) {
+        showToast("请先上传批量图片", true);
         return;
     }
 
@@ -532,7 +555,7 @@ async function runBatch() {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-                input_dir: inputDir,
+                input_dir: state.batchUploadDir,
                 use_stn: $("batchUseStn").checked,
                 use_yolo: $("batchUseYolo").checked
             })
@@ -543,6 +566,30 @@ async function runBatch() {
         setLoading(button, false, "");
         showToast(error.message, true);
     }
+}
+
+function bindDropZone(zone, onFiles) {
+    ["dragenter", "dragover"].forEach((eventName) => {
+        zone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            zone.classList.add("dragover");
+        });
+    });
+
+    ["dragleave", "dragend", "drop"].forEach((eventName) => {
+        zone.addEventListener(eventName, (event) => {
+            event.preventDefault();
+            if (eventName === "dragleave" && zone.contains(event.relatedTarget)) {
+                return;
+            }
+            zone.classList.remove("dragover");
+        });
+    });
+
+    zone.addEventListener("drop", (event) => {
+        const files = Array.from(event.dataTransfer?.files || []);
+        onFiles(files);
+    });
 }
 
 function bindTabs() {
@@ -564,9 +611,11 @@ function bindTabs() {
 }
 
 function bindEvents() {
+    const singleUploadZone = $("singleUploadZone");
+    const batchUploadZone = $("batchUploadZone");
+
     $("loadModelsBtn").addEventListener("click", loadModels);
     $("imageInput").addEventListener("change", onImageSelected);
-    $("uploadBatchImagesBtn").addEventListener("click", () => $("batchImagesInput").click());
     $("batchImagesInput").addEventListener("change", onBatchImagesSelected);
     $("runSingleBtn").addEventListener("click", runSingleInference);
     $("runBatchBtn").addEventListener("click", runBatch);
@@ -581,6 +630,8 @@ function bindEvents() {
     $("endValueInput").addEventListener("change", (event) => updateValue("end", event.target.value));
     $("imageModalClose").addEventListener("click", closeImageModal);
     $("imageModalBackdrop").addEventListener("click", closeImageModal);
+    bindDropZone(singleUploadZone, (files) => applySingleFile(files[0] || null));
+    bindDropZone(batchUploadZone, (files) => uploadBatchFiles(files));
     bindTabs();
 }
 
