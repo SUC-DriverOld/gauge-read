@@ -360,6 +360,43 @@ def create_csv_file(rows):
     return temp_file.name
 
 
+def save_uploaded_batch_images(files):
+    if not files:
+        raise ValueError("请至少选择一张图片")
+
+    upload_root = get_runtime_temp_root() / "batch_uploads" / uuid.uuid4().hex
+    upload_root.mkdir(parents=True, exist_ok=True)
+
+    saved_count = 0
+    used_names = set()
+    for index, file in enumerate(files, start=1):
+        original_name = Path(file.filename or f"image_{index}.png").name
+        suffix = Path(original_name).suffix.lower()
+        if suffix not in IMAGE_EXTENSIONS:
+            continue
+
+        target_name = original_name
+        stem = Path(original_name).stem or f"image_{index}"
+        serial = 1
+        while target_name in used_names:
+            target_name = f"{stem}_{serial}{suffix}"
+            serial += 1
+
+        content = file.file.read()
+        if not content:
+            continue
+
+        (upload_root / target_name).write_bytes(content)
+        used_names.add(target_name)
+        saved_count += 1
+
+    if saved_count == 0:
+        shutil.rmtree(upload_root, ignore_errors=True)
+        raise ValueError("未检测到可用图片文件")
+
+    return str(upload_root), saved_count
+
+
 def create_zip_file(rows):
     temp_file = tempfile.NamedTemporaryFile(
         delete=False, dir=get_runtime_temp_root(), suffix=".zip", prefix="gauge_batch_images_"
@@ -533,6 +570,19 @@ async def infer(image: UploadFile = File(...), use_stn: bool = Form(True), use_y
         payload["start_value"] = format_metric(start_value)
         payload["end_value"] = format_metric(end_value)
         return payload
+
+
+@app.post("/api/batch/uploads")
+async def upload_batch_images(images: list[UploadFile] = File(...)):
+    try:
+        saved_dir, saved_count = save_uploaded_batch_images(images)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    finally:
+        for image in images:
+            await image.close()
+
+    return {"input_dir": saved_dir, "count": saved_count}
 
 
 @app.post("/api/session/update-point")

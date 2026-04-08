@@ -353,6 +353,32 @@ function onImageSelected(event) {
     setInputPreview(state.currentFile);
 }
 
+async function onBatchImagesSelected(event) {
+    const files = Array.from(event.target.files || []);
+    const button = $("uploadBatchImagesBtn");
+    const hint = $("batchUploadHint");
+    if (!files.length) {
+        hint.textContent = "未选择图片";
+        return;
+    }
+
+    setLoading(button, true, "上传中...");
+    try {
+        const formData = new FormData();
+        files.forEach((file) => formData.append("images", file));
+        const payload = await request("/api/batch/uploads", { method: "POST", body: formData });
+        $("batchDirInput").value = payload.input_dir;
+        hint.textContent = `已选择 ${payload.count} 张图片`;
+        showToast(`已上传 ${payload.count} 张图片，批量路径已自动填入`);
+    } catch (error) {
+        hint.textContent = "未选择图片";
+        showToast(error.message, true);
+    } finally {
+        event.target.value = "";
+        setLoading(button, false, "");
+    }
+}
+
 async function runSingleInference() {
     if (!state.currentFile) {
         showToast("请先上传图片", true);
@@ -540,6 +566,8 @@ function bindTabs() {
 function bindEvents() {
     $("loadModelsBtn").addEventListener("click", loadModels);
     $("imageInput").addEventListener("change", onImageSelected);
+    $("uploadBatchImagesBtn").addEventListener("click", () => $("batchImagesInput").click());
+    $("batchImagesInput").addEventListener("change", onBatchImagesSelected);
     $("runSingleBtn").addEventListener("click", runSingleInference);
     $("runBatchBtn").addEventListener("click", runBatch);
     $("resultImage").addEventListener("click", handleResultClick);

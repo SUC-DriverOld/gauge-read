@@ -137,13 +137,18 @@
                 <div class="panel panel-light batch-panel">
                     <div class="panel-header">
                         <h3>批量推理</h3>
-                        <span class="hint">输入图片文件夹路径后即可处理</span>
+                        <span class="hint">输入图片文件夹路径或选择批量图片后即可处理</span>
                     </div>
                     <div class="batch-controls">
                         <label class="field stretch">
-                            <span>图片文件夹</span>
+                            <span class="field-label-inline">
+                                <span>图片文件夹</span>
+                                <span id="batchUploadHint" class="batch-upload-hint">未选择图片</span>
+                            </span>
                             <input id="batchDirInput" type="text" value="datas/test" placeholder="请输入待批量推理的图片文件夹路径">
                         </label>
+                        <input id="batchImagesInput" type="file" accept="image/*" multiple hidden>
+                        <button id="uploadBatchImagesBtn" class="button secondary" type="button">上传批量图片</button>
                         <label class="check">
                             <input id="batchUseStn" type="checkbox" checked>
                             <span>启用 STN</span>

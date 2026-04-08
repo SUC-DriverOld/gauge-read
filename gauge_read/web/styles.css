@@ -165,6 +165,13 @@ select {
     font-weight: 600;
 }
 
+.field-label-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
 .field input,
 .field select {
     width: 100%;
@@ -560,12 +567,27 @@ select {
 
 .batch-controls {
     align-items: flex-end;
-    flex-wrap: nowrap;
+    flex-wrap: wrap;
 }
 
 .batch-controls .field {
     flex: 1 1 auto;
     margin-bottom: 0;
+}
+
+#uploadBatchImagesBtn {
+    min-width: 140px;
+}
+
+.batch-upload-hint {
+    display: inline-flex;
+    align-items: center;
+    min-height: 0;
+    font-size: 14px;
+    line-height: 1.29;
+    letter-spacing: -0.224px;
+    color: var(--text-tertiary);
+    font-weight: 500;
 }
 
 #runBatchBtn {
@@ -1107,6 +1129,14 @@ select {
         grid-column: 1 / -1;
     }
 
+    #uploadBatchImagesBtn {
+        width: 100%;
+    }
+
+    .field-label-inline {
+        gap: 8px;
+    }
+
     #runBatchBtn {
         min-width: 0;
         width: 100%;
@@ -1236,6 +1266,7 @@ select {
         grid-column: 1 / -1;
     }
 
+    #uploadBatchImagesBtn,
     #runBatchBtn {
         grid-column: 1 / -1;
     }
