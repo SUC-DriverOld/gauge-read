@@ -321,7 +321,7 @@ class GaugeApp:
         self.current_ratio = ratio
         self.current_value = value
         if ocr_error:
-            return "OCR error, fallback to ratio-based reading: {:.2f}".format(value)
+            return "OCR Error"
         logger.info("Calculation completed: value=%s, ratio=%s", value, ratio)
         return value
 

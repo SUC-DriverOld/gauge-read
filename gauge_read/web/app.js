@@ -59,7 +59,8 @@ function fillSelect(select, values, preferred) {
     values.forEach((value) => {
         const option = document.createElement("option");
         option.value = value;
-        option.textContent = value;
+        const normalized = String(value || "").replace(/\\/g, "/");
+        option.textContent = normalized.split("/").pop() || value;
         if (value === preferred) {
             option.selected = true;
         }
@@ -253,7 +254,7 @@ function renderBatchTable() {
                         <label>读数 Ratio</label>
                         <strong>${row.ratio}</strong>
                     </div>
-                    <div class="mobile-batch-item full">
+                    <div class="mobile-batch-item">
                         <label>读数值</label>
                         <strong>${row.reading}</strong>
                     </div>

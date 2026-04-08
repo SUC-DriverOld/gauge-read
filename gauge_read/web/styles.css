@@ -273,7 +273,7 @@ select {
     color: var(--text-muted);
 }
 
-.instruction-list li + li {
+.instruction-list li+li {
     margin-top: 10px;
 }
 
@@ -508,7 +508,7 @@ select {
     transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
 }
 
-.mode-pill input:checked + span {
+.mode-pill input:checked+span {
     border-color: var(--apple-blue);
     color: var(--apple-blue);
     background: rgba(0, 113, 227, 0.04);
@@ -714,6 +714,10 @@ select {
     line-height: 1.29;
     letter-spacing: -0.224px;
     font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.06);
 }
 
 .results-table td {
@@ -904,6 +908,7 @@ select {
 }
 
 @media (max-width: 1200px) {
+
     .app-shell,
     .grid-two {
         grid-template-columns: 1fr;
@@ -1032,14 +1037,8 @@ select {
     }
 
     .single-metrics {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 12px;
-    }
-
-    .download-row,
-    .batch-controls,
-    .value-grid {
-        flex-direction: column;
     }
 
     .field {
@@ -1067,10 +1066,12 @@ select {
 
     .inline-controls {
         margin: 16px 0 18px;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
     }
 
     .check {
-        width: 100%;
+        width: auto;
         justify-content: center;
         min-height: 42px;
         padding: 0 12px;
@@ -1137,6 +1138,43 @@ select {
 
     .placeholder-copy {
         font-size: 15px;
+    }
+
+    .value-grid {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        margin-top: 16px;
+        align-items: start;
+    }
+
+    .value-grid .field {
+        margin-bottom: 0;
+    }
+
+    .batch-controls {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: end;
+    }
+
+    .batch-controls .field.stretch {
+        grid-column: 1 / -1;
+    }
+
+    #runBatchBtn {
+        min-width: 0;
+        width: 100%;
+        grid-column: 1 / -1;
+    }
+
+    .download-row {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        align-items: center;
+    }
+
+    .download-row .button {
+        width: 100%;
     }
 
     .batch-progress {
@@ -1235,11 +1273,39 @@ select {
     }
 
     .mobile-batch-metrics {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
         gap: 10px;
     }
 
     .mode-grid {
-        grid-template-columns: 1fr;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .inline-controls,
+    .download-row,
+    .value-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .batch-controls {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .batch-controls .field.stretch {
+        grid-column: 1 / -1;
+    }
+
+    #runBatchBtn {
+        grid-column: 1 / -1;
+    }
+
+    .mode-pill span,
+    .check,
+    .download-row .button {
+        min-height: 40px;
+    }
+
+    .value-grid .field span {
+        margin-bottom: 0;
     }
 }

@@ -350,7 +350,7 @@ def create_csv_file(rows):
         prefix="gauge_batch_",
         mode="w",
         newline="",
-        encoding="utf-8-sig"
+        encoding="utf-8-sig",
     )
     with temp_file as csv_file:
         writer = csv.writer(csv_file)
@@ -377,13 +377,7 @@ def create_zip_file(rows):
 
 
 def resolve_point_mode(label):
-    mapping = {
-        "起始点": "start",
-        "结束点": "end",
-        "指针尖端": "pointer_tip",
-        "指针根部": "pointer_root",
-        "圆心点": "center",
-    }
+    mapping = {"起始点": "start", "结束点": "end", "指针尖端": "pointer_tip", "指针根部": "pointer_root", "圆心点": "center"}
     return mapping.get(label, "none")
 
 
@@ -464,16 +458,8 @@ def run_batch_job(job_id, input_dir, use_stn, use_yolo):
         csv_path = create_csv_file(rows)
         _batch_jobs[job_id]["status"] = "completed"
         _batch_jobs[job_id]["downloads"] = {
-            "zip": register_download(
-                zip_path,
-                build_timestamped_filename("gauge_batch_images", "zip"),
-                "application/zip",
-            ),
-            "csv": register_download(
-                csv_path,
-                build_timestamped_filename("gauge_batch_results", "csv"),
-                "text/csv",
-            ),
+            "zip": register_download(zip_path, build_timestamped_filename("gauge_batch_images", "zip"), "application/zip"),
+            "csv": register_download(csv_path, build_timestamped_filename("gauge_batch_results", "csv"), "text/csv"),
         }
     except Exception as exc:
         _batch_jobs[job_id]["status"] = "failed"
@@ -505,12 +491,7 @@ def bootstrap():
         "yolo_path": cfg.predict.yolo_model_path,
     }
     loaded = get_app_logic().textnet is not None
-    return {
-        **options,
-        "defaults": defaults,
-        "loaded": loaded,
-        "instructions": INSTRUCTIONS,
-    }
+    return {**options, "defaults": defaults, "loaded": loaded, "instructions": INSTRUCTIONS}
 
 
 @app.post("/api/models/load")
@@ -518,9 +499,7 @@ def load_models(payload: LoadModelsPayload):
     with _infer_lock:
         try:
             cfg, resolved_config_path = build_cfg_for_reader_model(
-                model_path=payload.model_path,
-                stn_path=payload.stn_path,
-                yolo_path=payload.yolo_path,
+                model_path=payload.model_path, stn_path=payload.stn_path, yolo_path=payload.yolo_path
             )
             logic = reset_app_logic(cfg)
             logic.load_models(payload.model_path, payload.stn_path, payload.yolo_path)
@@ -534,11 +513,7 @@ def load_models(payload: LoadModelsPayload):
 
 
 @app.post("/api/infer")
-async def infer(
-    image: UploadFile = File(...),
-    use_stn: bool = Form(True),
-    use_yolo: bool = Form(True),
-):
+async def infer(image: UploadFile = File(...), use_stn: bool = Form(True), use_yolo: bool = Form(True)):
     with _infer_lock:
         logic = get_app_logic()
         if logic.textnet is None:
@@ -630,12 +605,14 @@ def download(file_id: str):
         raise HTTPException(status_code=404, detail="下载文件不存在或已过期")
     return FileResponse(payload["path"], media_type=payload["media_type"], filename=payload["filename"])
 
+
 def run_server(host="127.0.0.1", port=11451, open_browser=True):
     cleanup_runtime_cache()
     get_cfg().print_config()
     web_url = f"http://{host}:{port}/"
 
     if open_browser:
+
         def open_browser_later():
             try:
                 webbrowser.open(web_url)

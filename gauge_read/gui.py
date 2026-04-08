@@ -48,9 +48,7 @@ def start_fastapi(server_name, server_port, config_path=None):
         logger.info("Desktop GUI set GAUGE_CONFIG=%s", config_path)
 
     server_thread = threading.Thread(
-        target=run_server,
-        kwargs={"host": server_name, "port": server_port, "open_browser": False},
-        daemon=True,
+        target=run_server, kwargs={"host": server_name, "port": server_port, "open_browser": False}, daemon=True
     )
     server_thread.start()
 
@@ -92,12 +90,7 @@ def main(argv=None):
             text_select=False,
             confirm_close=True,
         )
-        webview.start(
-            func=start_fastapi,
-            args=(server_name, server_port, args.config),
-            debug=False,
-            http_server=False,
-        )
+        webview.start(func=start_fastapi, args=(server_name, server_port, args.config), debug=False, http_server=False)
     except Exception as exc:
         import traceback
 
