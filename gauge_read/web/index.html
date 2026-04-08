@@ -19,6 +19,7 @@
         <div class="page-tabs">
             <button class="tab-button active" data-tab="singleTab">单图推理</button>
             <button class="tab-button" data-tab="batchTab">批量推理</button>
+            <button class="tab-button" data-tab="realtimeTab">实时推理</button>
         </div>
     </section>
 
@@ -178,6 +179,73 @@
                         <div class="placeholder-copy">点击“开始批量推理”按钮后开始批量处理</div>
                     </div>
                     <div id="paginationWrap" class="pagination hidden"></div>
+                </div>
+            </section>
+
+            <section id="realtimeTab" class="tab-panel">
+                <div class="panel panel-light realtime-panel">
+                    <div class="panel-header">
+                        <h3>实时推理</h3>
+                        <span class="hint">点击下方区域选择摄像头，开启后按空闲节奏逐帧推理</span>
+                    </div>
+                    <div id="cameraControls" class="camera-controls hidden">
+                        <div class="camera-controls-row">
+                            <label class="field camera-select-field">
+                                <span>当前摄像头</span>
+                                <select id="cameraSelect"></select>
+                            </label>
+                        </div>
+                    </div>
+                    <div id="cameraStage" class="camera-stage">
+                        <video id="cameraVideo" class="hidden" playsinline autoplay muted></video>
+                        <div id="cameraStageEmpty" class="camera-stage-empty">
+                            <span>点击选择摄像头</span>
+                            <small>开启后会在这里实时显示摄像头画面</small>
+                        </div>
+                    </div>
+                    <button id="toggleRealtimeBtn" class="button primary realtime-toggle" type="button">开始实时推理</button>
+                    <p id="realtimeStatus" class="realtime-status">待开始</p>
+                    <div class="single-metrics realtime-metrics">
+                        <article class="metric-card">
+                            <span class="metric-heading">
+                                <span id="realtimeReadingLabel">读数结果</span>
+                                <small id="realtimeReadingTime">--:--:--</small>
+                            </span>
+                            <strong id="realtimeReading">-</strong>
+                        </article>
+                        <article class="metric-card">
+                            <span class="metric-heading">
+                                <span>当前 Ratio</span>
+                                <small id="realtimeRatioTime">--:--:--</small>
+                            </span>
+                            <strong id="realtimeRatio">-</strong>
+                        </article>
+                    </div>
+                    <div class="realtime-options-row">
+                        <label class="check realtime-option-check">
+                            <input id="realtimeUseStn" type="checkbox" checked>
+                            <span>启用 STN</span>
+                        </label>
+                        <label class="check realtime-option-check">
+                            <input id="realtimeUseYolo" type="checkbox" checked>
+                            <span>启用 YOLO</span>
+                        </label>
+                        <label class="check realtime-option-check realtime-manual-toggle">
+                            <input id="realtimeManualToggle" type="checkbox">
+                            <span>手动输入起始值和结束值</span>
+                        </label>
+                    </div>
+                    <div id="realtimeValueGrid" class="value-grid realtime-value-grid hidden">
+                        <label class="field">
+                            <span>起始值</span>
+                            <input id="realtimeStartValueInput" type="text" value="0" disabled>
+                        </label>
+                        <label class="field">
+                            <span>结束值</span>
+                            <input id="realtimeEndValueInput" type="text" value="0" disabled>
+                        </label>
+                    </div>
+                    <canvas id="realtimeCaptureCanvas" class="hidden"></canvas>
                 </div>
             </section>
         </main>
