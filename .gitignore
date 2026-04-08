@@ -16,3 +16,4 @@ logs
 .logs
 .ruff_cache/
 .DS_Store
+.cache

@@ -1,6 +1,6 @@
 # Gauge Read
 
-Gauge Read is a comprehensive solution for reading pointer meters in complex environments. It includes a main meter reading model, a Spatial Transformer Network (STN) for correcting perspective distortion, and a YOLO-based meter detection model. The project provides a unified command line interface for training, validation, inference, and launching a web UI and desktop GUI.
+Gauge Read is a comprehensive solution for reading pointer meters in complex environments. It includes a main meter reading model, a Spatial Transformer Network (STN) for correcting perspective distortion, and a YOLO-based meter detection model. The project provides a unified command line interface for training, validation, inference, and launching web and desktop interfaces.
 
 ## Installation
 
@@ -41,7 +41,7 @@ Gauge Read is a comprehensive solution for reading pointer meters in complex env
     Gauge Read unified command line entrypoint
 
     positional arguments:
-    {api,train,train-stn,valid,infer,webui,gui}
+    {api,train,train-stn,valid,infer,web,webui,gui}
 
     Available subcommands:
         api       Launch the FastAPI service
@@ -49,11 +49,18 @@ Gauge Read is a comprehensive solution for reading pointer meters in complex env
         train-stn Train the STN correction model
         valid     Run validation on a labeled dataset
         infer     Run single-image CLI inference
+        web       Launch the native HTML/CSS/JS Web UI
         webui     Launch the Gradio WebUI
         gui       Launch the desktop GUI wrapper
 
     options:
     -h, --help            show this help message and exit
+    ```
+
+    To launch the native WebUI, with `config.yaml` simply run:
+
+    ```bash
+    gaugeread web -c config.yaml
     ```
 
     To launch the Gradio WebUI, with `config.yaml` simply run:
@@ -86,7 +93,7 @@ You can train the main meter reading model and the STN correction model using th
 
 ## Inference
 
-We provide several options for running inference on images, including single-image CLI inference, a Gradio WebUI, and a desktop GUI wrapper. You can use the `infer`, `webui`, and `gui` subcommands to launch these interfaces.
+We provide several options for running inference on images, including single-image CLI inference, a native HTML/CSS/JS Web UI, a Gradio WebUI, and a desktop GUI wrapper. You can use the `infer`, `web`, `webui`, and `gui` subcommands to launch these interfaces.
 
 We also provide api service for inference. You can launch the FastAPI service using the `api` subcommand, and then send POST requests to the `/infer` endpoint with an image file to get the meter reading results.
 

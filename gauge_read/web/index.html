@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模拟仪表读数系统</title>
+    <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+    <div class="app-shell">
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-mark">GR</div>
+                <div>
+                    <p class="eyebrow">Gauge Read</p>
+                    <h1>模拟仪表读数系统</h1>
+                </div>
+            </div>
+
+            <section class="panel glass">
+                <div class="panel-header">
+                    <h2>模型控制台</h2>
+                    <span id="modelStatus" class="status-badge idle">未加载</span>
+                </div>
+                <label class="field">
+                    <span>仪表读数模型</span>
+                    <select id="modelSelect"></select>
+                </label>
+                <label class="field">
+                    <span>STN 矫正模型</span>
+                    <select id="stnSelect"></select>
+                </label>
+                <label class="field">
+                    <span>YOLO 检测模型</span>
+                    <select id="yoloSelect"></select>
+                </label>
+                <button id="loadModelsBtn" class="button primary">加载模型</button>
+            </section>
+
+            <section class="panel glass">
+                <div class="panel-header">
+                    <h2>使用说明</h2>
+                </div>
+                <ol id="instructionList" class="instruction-list"></ol>
+            </section>
+        </aside>
+
+        <main class="main-content">
+            <section class="hero">
+                <div></div>
+            </section>
+
+            <section class="tabs">
+                <button class="tab-button active" data-tab="singleTab">单图推理</button>
+                <button class="tab-button" data-tab="batchTab">批量推理</button>
+            </section>
+
+            <section id="toast" class="toast hidden"></section>
+
+            <section id="singleTab" class="tab-panel active">
+                <div class="grid-two">
+                    <section class="panel canvas-panel">
+                        <div class="panel-header">
+                            <h3>输入设置</h3>
+                        </div>
+                        <label class="upload-zone" for="imageInput">
+                            <input id="imageInput" type="file" accept="image/*" hidden>
+                            <div id="uploadEmptyState">
+                                <span>点击上传仪表图片</span>
+                                <small id="uploadHint">支持 JPG / PNG / BMP / WEBP</small>
+                            </div>
+                            <div id="uploadPreviewState" class="upload-preview-state hidden">
+                                <img id="inputPreviewImage" alt="输入图片缩略图">
+                                <div class="upload-preview-meta">
+                                    <strong id="inputPreviewName"></strong>
+                                    <small>再次点击可重新上传</small>
+                                </div>
+                            </div>
+                        </label>
+                        <div class="inline-controls">
+                            <label class="check">
+                                <input id="singleUseStn" type="checkbox" checked>
+                                <span>启用 STN 矫正</span>
+                            </label>
+                            <label class="check">
+                                <input id="singleUseYolo" type="checkbox" checked>
+                                <span>启用 YOLO 检测</span>
+                            </label>
+                        </div>
+                        <button id="runSingleBtn" class="button primary">开始推理</button>
+                    </section>
+
+                    <section class="panel result-panel">
+                        <div class="panel-header">
+                            <h3>结果与修正</h3>
+                            <span class="hint">选择修正模式后点击图片</span>
+                        </div>
+                        <div class="single-metrics">
+                            <article class="metric-card compact">
+                                <span id="heroReadingLabel">读数结果</span>
+                                <strong id="heroReading">-</strong>
+                            </article>
+                            <article class="metric-card compact">
+                                <span>当前 Ratio</span>
+                                <strong id="heroRatio">-</strong>
+                            </article>
+                        </div>
+                        <div class="mode-grid">
+                            <label class="mode-pill"><input type="radio" name="editMode" value="未选择" checked><span>未选择</span></label>
+                            <label class="mode-pill"><input type="radio" name="editMode" value="起始点"><span>起始点</span></label>
+                            <label class="mode-pill"><input type="radio" name="editMode" value="结束点"><span>结束点</span></label>
+                            <label class="mode-pill"><input type="radio" name="editMode" value="指针尖端"><span>指针尖端</span></label>
+                            <label class="mode-pill"><input type="radio" name="editMode" value="指针根部"><span>指针根部</span></label>
+                            <label class="mode-pill"><input type="radio" name="editMode" value="圆心点"><span>圆心点</span></label>
+                        </div>
+                        <div id="resultStage" class="result-stage empty">
+                            <img id="resultImage" alt="处理结果预览">
+                            <div id="resultPlaceholder" class="placeholder-copy">推理完成后会在这里显示结果图像</div>
+                        </div>
+                        <div class="value-grid">
+                            <label class="field">
+                                <span>起始值</span>
+                                <input id="startValueInput" type="text" value="0">
+                            </label>
+                            <label class="field">
+                                <span>结束值</span>
+                                <input id="endValueInput" type="text" value="0">
+                            </label>
+                        </div>
+                    </section>
+                </div>
+            </section>
+
+            <section id="batchTab" class="tab-panel">
+                <div class="panel batch-panel">
+                    <div class="panel-header">
+                        <h3>批量推理</h3>
+                        <span class="hint">输入图片文件夹路径后即可处理</span>
+                    </div>
+                    <div class="batch-controls">
+                        <label class="field stretch">
+                            <span>图片文件夹</span>
+                            <input id="batchDirInput" type="text" value="datas/test" placeholder="请输入待批量推理的图片文件夹路径">
+                        </label>
+                        <label class="check">
+                            <input id="batchUseStn" type="checkbox" checked>
+                            <span>启用 STN</span>
+                        </label>
+                        <label class="check">
+                            <input id="batchUseYolo" type="checkbox" checked>
+                            <span>启用 YOLO</span>
+                        </label>
+                        <button id="runBatchBtn" class="button primary">开始批量推理</button>
+                    </div>
+                    <div class="download-row">
+                        <a id="downloadZip" class="button secondary disabled" href="#" aria-disabled="true">下载结果图 ZIP</a>
+                        <a id="downloadCsv" class="button secondary disabled" href="#" aria-disabled="true">下载结果 CSV</a>
+                    </div>
+                    <div id="batchProgressWrap" class="batch-progress hidden">
+                        <div class="batch-progress-head">
+                            <span>当前进度</span>
+                            <strong id="batchProgressText">0/0</strong>
+                        </div>
+                        <div class="progress-bar">
+                            <div id="batchProgressBar" class="progress-bar-fill"></div>
+                        </div>
+                    </div>
+                    <div id="batchTableWrap" class="table-wrap empty">
+                        <div class="placeholder-copy">点击“开始批量推理”按钮后开始批量处理</div>
+                    </div>
+                    <div id="paginationWrap" class="pagination hidden"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+    <div id="imageModal" class="image-modal hidden">
+        <div id="imageModalBackdrop" class="image-modal-backdrop"></div>
+        <div class="image-modal-dialog">
+            <button id="imageModalClose" class="image-modal-close" type="button">×</button>
+            <img id="imageModalImg" alt="放大预览">
+        </div>
+    </div>
+    <script src="/app.js"></script>
+</body>
+</html>

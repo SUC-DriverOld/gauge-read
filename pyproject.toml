@@ -36,6 +36,7 @@ include = ["gauge_read*"]
 
 [tool.setuptools.package-data]
 gauge_read = ["configs/*.yaml", "datasets/units.txt"]
+"gauge_read.web" = ["*.html", "*.css", "*.js"]
 "gauge_read.webui" = ["*.html"]
 
 [tool.uv.sources]
