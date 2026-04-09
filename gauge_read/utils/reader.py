@@ -155,6 +155,54 @@ class MeterReader(object):
         self.debug = debug
         self.last_debug_image = None
 
+    def render_debug_image(
+        self,
+        ori_img,
+        pointer_mask,
+        dail_mask,
+        word_mask,
+        std_point,
+        predicted_center=None,
+        pointer_line=None,
+        reading=None,
+        ratio=None,
+    ):
+        debug_img = ori_img.copy()
+
+        colored_masks = np.zeros_like(debug_img)
+        colored_masks[pointer_mask > 0] = [0, 0, 255]
+        colored_masks[dail_mask > 0] = [0, 255, 0]
+        colored_masks[word_mask > 0] = [255, 0, 0]
+        debug_img = cv2.addWeighted(debug_img, 1.0, colored_masks, 0.5, 0)
+
+        if predicted_center is not None:
+            center = (int(predicted_center[0]), int(predicted_center[1]))
+            cv2.circle(debug_img, center, 5, (0, 0, 255), -1)
+            logger.debug("using predicted center from STN: %s", center)
+
+        if std_point is not None:
+            if len(std_point) >= 1:
+                cv2.circle(debug_img, tuple(map(int, std_point[0])), 2, (255, 0, 0), 2)
+            if len(std_point) >= 2:
+                cv2.circle(debug_img, tuple(map(int, std_point[1])), 2, (255, 0, 0), 2)
+
+        if pointer_line is not None and len(pointer_line) >= 2:
+            pt1 = tuple(map(int, pointer_line[0]))
+            pt2 = tuple(map(int, pointer_line[1]))
+            cv2.line(debug_img, pt1, pt2, (255, 0, 255), 2)
+
+        ratio_text = "-" if ratio is None else f"{float(ratio):.2f}" if isinstance(ratio, (int, float)) else str(ratio)
+        if isinstance(reading, (int, float)):
+            value_text = str(round(float(reading), 3))
+        elif reading is None:
+            value_text = "-"
+        else:
+            value_text = str(reading)
+
+        cv2.putText(debug_img, f"Ratio: {ratio_text}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(debug_img, f"Value: {value_text}", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2, cv2.LINE_AA)
+        return debug_img
+
     def compute_reading(self, std_points, pointer_line, start_val=0.0, end_val=0.0, predicted_center=None):
         """
         Compute the reading value based on scale points and pointer line.
@@ -225,11 +273,41 @@ class MeterReader(object):
 
         return float(f"{reading:.4f}"), float(f"{ratio:.4f}")
 
-    def __call__(self, image, point_mask, dail_mask, word_mask, number, std_point, predicted_center=None):
+    def __call__(
+        self,
+        image,
+        point_mask,
+        dail_mask,
+        word_mask,
+        number,
+        std_point,
+        predicted_center=None,
+        reading_override=None,
+        ratio_override=None,
+        pointer_line_override=None,
+    ):
         self.last_debug_image = None
+        if self.debug and (reading_override is not None or ratio_override is not None or pointer_line_override is not None):
+            self.last_debug_image = self.render_debug_image(
+                image,
+                point_mask,
+                dail_mask,
+                word_mask,
+                std_point,
+                predicted_center=predicted_center,
+                pointer_line=pointer_line_override,
+                reading=reading_override,
+                ratio=ratio_override,
+            )
+            logger.debug(
+                "meter reader debug visualization updated from app state: value=%s ratio=%s",
+                reading_override,
+                ratio_override,
+            )
+            return reading_override
+
         img_result = image.copy()
         value = self.find_lines(img_result, point_mask, dail_mask, word_mask, number, std_point, predicted_center)
-        logger.debug("meter reader result=%s", value)
 
         return value
 

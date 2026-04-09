@@ -247,7 +247,11 @@ class GaugeApp:
             ocr_error = True
             logger.warning("OCR transcript could not be converted to numeric value: %s", pred_transcripts)
 
+        self.current_ocr_error = ocr_error
+        value = self.recalculate(ocr_error)
+
         try:
+            debug_reading = value if ocr_error else self.current_value
             _ = self.debug_meter_reader(
                 img_show.copy(),
                 pointer_pred,
@@ -256,6 +260,9 @@ class GaugeApp:
                 [pred_transcripts] if isinstance(pred_transcripts, str) else pred_transcripts,
                 final_std,
                 predicted_center,
+                reading_override=debug_reading,
+                ratio_override=self.current_ratio,
+                pointer_line_override=self.current_pointer_line,
             )
             debug_image = self.debug_meter_reader.last_debug_image
             if debug_image is not None:
@@ -264,8 +271,6 @@ class GaugeApp:
             logger.exception("Failed to generate single-image debug visualization")
             self.current_debug_image = None
 
-        self.current_ocr_error = ocr_error
-        value = self.recalculate(ocr_error)
         logger.info(
             "Single-image inference completed: value=%s, ratio=%s, start_value=%s, end_value=%s, ocr_error=%s",
             value,
