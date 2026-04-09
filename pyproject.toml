@@ -38,7 +38,17 @@ include = ["gauge_read*"]
 
 [tool.setuptools.package-data]
 gauge_read = ["configs/*.yaml", "datasets/units.txt"]
-"gauge_read.web" = ["*.html", "*.css", "*.js"]
+"gauge_read.web" = [
+    "*.html",
+    "*.css",
+    "*.js",
+    "static/css/*.css",
+    "static/css/pages/*.css",
+    "static/css/shared/*.css",
+    "static/js/*.js",
+    "static/js/pages/*.js",
+    "static/js/shared/*.js",
+]
 
 [tool.uv.sources]
 torch = [
@@ -69,7 +79,7 @@ skip-magic-trailing-comma = true
 
 [tool.ruff.lint]
 select = ["E", "F", "B", "I", "N"]
-ignore = ["E501", "I001", "N806", "N803", "N999", "N812", "N802", "E402"]
+ignore = ["E501", "I001", "N806", "N803", "N999", "N812", "N802", "E402", "B008"]
 
 [tool.ruff.lint.isort]
 split-on-trailing-comma = false

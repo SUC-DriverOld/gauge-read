@@ -1,0 +1,250 @@
+.batch-controls,
+.batch-actions {
+    display: flex;
+    gap: 14px;
+    flex-wrap: wrap;
+}
+
+.batch-controls {
+    margin-bottom: 20px;
+}
+
+.batch-upload-zone {
+    min-height: 220px;
+    flex: 1 1 100%;
+}
+
+.batch-upload-preview-state {
+    display: grid;
+    gap: 8px;
+    justify-items: center;
+    text-align: center;
+}
+
+.batch-upload-preview-state strong {
+    font-size: 22px;
+    line-height: 1.2;
+    letter-spacing: -0.28px;
+    color: var(--text-dark);
+}
+
+.batch-upload-preview-state small {
+    font-size: 13px;
+    line-height: 1.38;
+    letter-spacing: -0.16px;
+    color: var(--text-tertiary);
+}
+
+.batch-actions {
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 20px;
+}
+
+.batch-actions .button,
+.batch-actions .check {
+    flex: 0 0 auto;
+}
+
+.batch-actions .button.secondary {
+    background: #ffffff;
+    color: var(--text-dark);
+    border-color: var(--line-light);
+}
+
+.batch-actions .button.secondary:hover {
+    background: #f6f6f8;
+}
+
+#runBatchBtn {
+    min-width: 196px;
+}
+
+.batch-progress {
+    margin: 0 0 20px;
+    padding: 18px 20px;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: var(--shadow-soft);
+}
+
+.batch-progress-head {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 12px;
+    font-size: 14px;
+    line-height: 1.29;
+    letter-spacing: -0.224px;
+    color: var(--text-muted);
+}
+
+.batch-progress-head strong {
+    color: var(--text-dark);
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    border-radius: var(--radius-pill);
+    background: rgba(0, 0, 0, 0.08);
+    overflow: hidden;
+}
+
+.progress-bar-fill {
+    width: 0%;
+    height: 100%;
+    border-radius: inherit;
+    background: var(--apple-blue);
+    transition: width 0.25s ease;
+}
+
+.table-wrap {
+    border-radius: 8px;
+    background: #ffffff;
+    overflow: hidden;
+    box-shadow: var(--shadow-soft);
+}
+
+.table-wrap.empty {
+    min-height: 220px;
+    display: grid;
+    place-items: center;
+}
+
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.results-table th,
+.results-table td {
+    padding: 16px 14px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    text-align: center;
+    vertical-align: middle;
+}
+
+.results-table th {
+    background: #fafafc;
+    color: var(--text-dark);
+    font-size: 14px;
+    line-height: 1.29;
+    letter-spacing: -0.224px;
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.06);
+}
+
+.results-table td {
+    font-size: 17px;
+    line-height: 1.47;
+    letter-spacing: -0.374px;
+}
+
+.thumb-block {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+}
+
+.thumb-block img {
+    width: 120px;
+    border-radius: 8px;
+    box-shadow: var(--shadow-soft);
+}
+
+.thumb-action {
+    cursor: zoom-in;
+}
+
+.thumb-block span {
+    max-width: 240px;
+    font-size: 14px;
+    line-height: 1.29;
+    letter-spacing: -0.224px;
+    color: var(--text-muted);
+    text-align: center;
+    word-break: break-all;
+}
+
+.pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.pagination-info {
+    min-width: 72px;
+    text-align: center;
+    font-size: 14px;
+    line-height: 1.29;
+    letter-spacing: -0.224px;
+    color: var(--text-muted);
+}
+
+.mobile-batch-list {
+    display: grid;
+    gap: 14px;
+    padding: 14px;
+}
+
+.mobile-batch-card {
+    border-radius: 12px;
+    padding: 14px;
+    background: #fafafc;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.04);
+}
+
+.mobile-batch-thumb {
+    display: grid;
+    gap: 10px;
+    justify-items: center;
+    margin-bottom: 14px;
+}
+
+.mobile-batch-thumb img {
+    width: min(100%, 220px);
+    border-radius: 10px;
+    box-shadow: var(--shadow-soft);
+}
+
+.mobile-batch-thumb span {
+    font-size: 14px;
+    line-height: 1.29;
+    letter-spacing: -0.224px;
+    color: var(--text-muted);
+    text-align: center;
+    word-break: break-all;
+}
+
+.mobile-batch-metrics {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 14px;
+}
+
+.mobile-batch-item {
+    display: grid;
+    gap: 4px;
+}
+
+.mobile-batch-item label {
+    font-size: 12px;
+    line-height: 1.33;
+    letter-spacing: -0.12px;
+    color: var(--text-tertiary);
+}
+
+.mobile-batch-item strong {
+    font-size: 16px;
+    line-height: 1.35;
+    letter-spacing: -0.32px;
+    color: var(--text-dark);
+    word-break: break-word;
+}

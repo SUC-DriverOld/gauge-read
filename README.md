@@ -56,10 +56,10 @@ Gauge Read is a comprehensive solution for reading pointer meters in complex env
     -h, --help            show this help message and exit
     ```
 
-    To launch the WebUI, with `config.yaml` simply run:
+    To launch the WebUI, run:
 
     ```bash
-    gaugeread web -c config.yaml
+    gaugeread web
     ```
 
 ## Training and Validation

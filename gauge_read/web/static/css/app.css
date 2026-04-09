@@ -1,0 +1,6 @@
+@import url("/static/css/shared/base.css");
+@import url("/static/css/shared/layout.css");
+@import url("/static/css/pages/single.css");
+@import url("/static/css/pages/batch.css");
+@import url("/static/css/pages/realtime.css");
+@import url("/static/css/shared/responsive.css");

@@ -1,0 +1,122 @@
+:root {
+    --bg-dark: #000000;
+    --bg-light: #f5f5f7;
+    --surface-light: #ffffff;
+    --text-dark: #1d1d1f;
+    --text-light: #ffffff;
+    --text-muted: rgba(0, 0, 0, 0.8);
+    --text-tertiary: rgba(0, 0, 0, 0.48);
+    --apple-blue: #0071e3;
+    --link-blue: #0066cc;
+    --line-light: rgba(0, 0, 0, 0.08);
+    --shadow-card: rgba(0, 0, 0, 0.22) 3px 5px 30px 0px;
+    --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.04);
+    --radius-card: 12px;
+    --radius-input: 11px;
+    --radius-pill: 980px;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+html {
+    scroll-behavior: smooth;
+}
+
+body {
+    margin: 0;
+    min-height: 100vh;
+    background: var(--bg-light);
+    color: var(--text-dark);
+    font-family: "SF Pro Text", "SF Pro Icons", "Helvetica Neue", Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+body.modal-open {
+    overflow: hidden;
+}
+
+img {
+    display: block;
+    max-width: 100%;
+}
+
+button,
+input,
+select {
+    font: inherit;
+}
+
+.toast {
+    position: fixed;
+    top: 64px;
+    right: 24px;
+    z-index: 80;
+    max-width: 360px;
+    padding: 14px 16px;
+    border-radius: 8px;
+    background: rgba(29, 29, 31, 0.94);
+    color: var(--text-light);
+    box-shadow: var(--shadow-card);
+    font-size: 14px;
+    line-height: 1.29;
+    letter-spacing: -0.224px;
+}
+
+.toast.error {
+    background: rgba(117, 24, 24, 0.94);
+}
+
+.toast.hidden {
+    display: none;
+}
+
+.image-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 90;
+    display: grid;
+    place-items: center;
+}
+
+.image-modal-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.72);
+}
+
+.image-modal-dialog {
+    position: relative;
+    z-index: 1;
+    width: min(92vw, 1180px);
+    padding: 20px;
+    border-radius: 12px;
+    background: rgba(29, 29, 31, 0.96);
+    box-shadow: var(--shadow-card);
+}
+
+.image-modal-dialog img {
+    width: 100%;
+    max-height: calc(88vh - 40px);
+    object-fit: contain;
+}
+
+.image-modal-close {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 42px;
+    height: 42px;
+    border: none;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.14);
+    color: var(--text-light);
+    font-size: 28px;
+    cursor: pointer;
+}
+
+.hidden {
+    display: none !important;
+}
