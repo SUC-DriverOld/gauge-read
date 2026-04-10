@@ -26,7 +26,8 @@ Gauge Read is a comprehensive solution for reading pointer meters in complex env
     ```
     gauge-read/pretrain
         ├─meter
-        │   └── meter_convnext_tiny_ep100.pth
+        │   ├── meter_convnext_tiny_ep100.pth
+        │   └── meter_convnext_tiny_ep100.yaml (Optional)
         ├─stn
         │   └── stn_ep35_loss0.0551.pth
         └─yolo
@@ -86,7 +87,7 @@ You can train the main meter reading model and the STN correction model using th
 
 ## Inference
 
-We provide several options for running inference on images, including single-image CLI inference, a native HTML/CSS/JS Web UI, a Gradio WebUI, and a desktop GUI wrapper. You can use the `infer`, `web`, `webui`, and `gui` subcommands to launch these interfaces.
+We provide several options for running inference on images, including single-image CLI inference, a native HTML/CSS/JS Web UI, and a desktop GUI wrapper. You can use the `infer`, `web`, and `gui` subcommands to launch these interfaces.
 
 We also provide api service for inference. You can launch the FastAPI service using the `api` subcommand, and then send POST requests to the `/infer` endpoint with an image file to get the meter reading results.
 

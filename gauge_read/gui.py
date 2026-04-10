@@ -1,5 +1,5 @@
-import argparse
 import os
+import argparse
 import socket
 import threading
 import time
@@ -42,11 +42,7 @@ def wait_for_server(host, port, timeout=20):
     return False
 
 
-def start_fastapi(server_name, server_port, config_path=None):
-    if config_path:
-        os.environ["GAUGE_CONFIG"] = config_path
-        logger.info("Desktop GUI set GAUGE_CONFIG=%s", config_path)
-
+def start_fastapi(server_name, server_port):
     server_thread = threading.Thread(
         target=run_server, kwargs={"host": server_name, "port": server_port, "open_browser": False}, daemon=True
     )
@@ -64,7 +60,6 @@ def start_fastapi(server_name, server_port, config_path=None):
 
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Gauge Read Desktop GUI")
-    parser.add_argument("-c", "--config", type=str, default=None, help="Path to YAML config file")
     parser.add_argument("-d", "--debug", action="store_true", help="Enable debug logging")
     args = parser.parse_args(argv)
 
@@ -76,7 +71,7 @@ def main(argv=None):
 
     server_name = "127.0.0.1"
     server_port = find_free_port(server_name)
-    logger.info("Starting desktop GUI with config=%s", args.config or "default")
+    logger.info("Starting desktop GUI")
 
     global main_window
     try:
@@ -90,7 +85,7 @@ def main(argv=None):
             text_select=False,
             confirm_close=True,
         )
-        webview.start(func=start_fastapi, args=(server_name, server_port, args.config), debug=False, http_server=False)
+        webview.start(func=start_fastapi, args=(server_name, server_port), debug=False, http_server=False)
     except Exception as exc:
         import traceback
 
