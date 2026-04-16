@@ -42,6 +42,7 @@ gauge_read = ["configs/*.yaml", "datasets/units.txt"]
     "*.html",
     "*.css",
     "*.js",
+    "static/favicon.svg",
     "static/css/*.css",
     "static/css/pages/*.css",
     "static/css/shared/*.css",

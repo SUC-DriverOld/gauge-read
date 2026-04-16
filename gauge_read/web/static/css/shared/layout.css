@@ -435,3 +435,43 @@
     letter-spacing: -0.374px;
     text-align: center;
 }
+
+.site-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    padding: 0 24px 28px;
+    text-align: center;
+}
+
+.site-footer small {
+    font-size: 12px;
+    line-height: 1.33;
+    letter-spacing: -0.12px;
+    color: var(--text-tertiary);
+}
+
+.footer-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--text-tertiary);
+    font-size: 12px;
+    line-height: 1.33;
+    letter-spacing: -0.12px;
+    text-decoration: none;
+    transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.footer-link:hover {
+    color: var(--text-dark);
+}
+
+.footer-link svg {
+    width: 14px;
+    height: 14px;
+    fill: currentColor;
+    flex: 0 0 auto;
+    transform: translateY(-1px);
+}
