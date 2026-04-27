@@ -300,9 +300,7 @@ class MeterReader(object):
                 ratio=ratio_override,
             )
             logger.debug(
-                "meter reader debug visualization updated from app state: value=%s ratio=%s",
-                reading_override,
-                ratio_override,
+                "meter reader debug visualization updated from app state: value=%s ratio=%s", reading_override, ratio_override
             )
             return reading_override
 
@@ -384,73 +382,53 @@ class MeterReader(object):
             logger.warning("dial detection failed: std_point is missing")
             return "can not detect dail"
 
-        # calculate angle
-        a1 = std_point[0]
-        a2 = std_point[1]
+        a1 = tuple(map(int, std_point[0]))
+        a2 = tuple(map(int, std_point[1]))
         if self.debug:
             cv2.circle(ori_img, a1, 2, (255, 0, 0), 2)
             cv2.circle(ori_img, a2, 2, (255, 0, 0), 2)
-        one = [[pointer_line[0][0], pointer_line[0][1]], [a1[0], a1[1]]]
-        two = [[pointer_line[0][0], pointer_line[0][1]], [a2[0], a2[1]]]
-        three = [[pointer_line[0][0], pointer_line[0][1]], [pointer_line[1][0], pointer_line[1][1]]]
-        logger.debug("angle vectors one=%s two=%s three=%s", one, two, three)
 
-        one = np.array(one)
-        two = np.array(two)
-        three = np.array(three)
+        end_val = 0.0
+        if number is not None and len(number) > 0 and number[0] != "":
+            end_val = float(number[0])
 
-        v1 = one[1] - one[0]
-        v2 = two[1] - two[0]
-        v3 = three[1] - three[0]
-
-        distance = self.get_distance_point2line(
-            [a1[0], a1[1]], [pointer_line[0][0], pointer_line[0][1], pointer_line[1][0], pointer_line[1][1]]
+        value, ratio = self.compute_reading(
+            std_points=[a1, a2],
+            pointer_line=[pointer_line[0], pointer_line[1]],
+            start_val=0.0,
+            end_val=end_val,
+            predicted_center=predicted_center,
         )
-        # print("dis",distance)
+        logger.debug("compute_reading result: value=%s ratio=%s", value, ratio)
 
-        flag = self.judge(pointer_line[0], std_point[0], pointer_line[1])
-        # print("flag",flag)
-
-        std_ang = self.angle(v1, v2)
-        logger.debug("std angle=%s", std_ang)
-        now_ang = self.angle(v1, v3)
-        if flag > 0:
-            now_ang = 360 - now_ang
-        logger.debug("pointer angle=%s", now_ang)
-
-        # calculate value
-        ratio = 0.0
-        if std_ang != 0:
-            ratio = now_ang / std_ang
-
-        logger.debug("angle ratio pointer/full=%.4f", ratio)
-
-        if number is not None and number[0] != "":
-            two_value = float(number[0])
-        else:
-            # Even if number is missing, show ratio
+        if number is None or len(number) == 0 or number[0] == "":
             if self.debug:
-                ori_img = cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 80), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 255, 255), 2)
-                self.last_debug_image = ori_img.copy()
+                self.last_debug_image = self.render_debug_image(
+                    ori_img,
+                    pointer_mask,
+                    dail_mask,
+                    word_mask,
+                    std_point,
+                    predicted_center=predicted_center,
+                    pointer_line=pointer_line,
+                    reading=None,
+                    ratio=ratio,
+                )
             return f"Ratio: {ratio}"
 
-        if std_ang * now_ang != 0:
-            value = two_value / std_ang
-            value = value * now_ang
-        else:
-            logger.warning("angle detection failed: std_ang=%s now_ang=%s", std_ang, now_ang)
-            return "angle detect error"
-
-        if flag > 0 and distance < 40:
-            value = 0.00
-            ratio = 0.0  # Correction for zero position
-        else:
-            value = round(value, 3)
-
+        value = round(value, 3)
         if self.debug:
-            cv2.putText(ori_img, f"Ratio: {ratio:.2f}", (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 255), 2, cv2.LINE_AA)
-            cv2.putText(ori_img, f"Value: {str(value)}", (30, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2, cv2.LINE_AA)
-            self.last_debug_image = ori_img.copy()
+            self.last_debug_image = self.render_debug_image(
+                ori_img,
+                pointer_mask,
+                dail_mask,
+                word_mask,
+                std_point,
+                predicted_center=predicted_center,
+                pointer_line=pointer_line,
+                reading=value,
+                ratio=ratio,
+            )
 
         return value
 
@@ -494,40 +472,3 @@ class MeterReader(object):
             return (int(center[0]), int(center[1]))
         except np.linalg.LinAlgError:
             return None  # Parallel lines or other singularity
-
-    def get_distance_point2line(self, point, line):
-        """
-        Args:
-            point: [x0, y0]
-            line: [x1, y1, x2, y2]
-        """
-        line_point1, line_point2 = np.array(line[0:2]), np.array(line[2:])
-        vec1 = line_point1 - point
-        vec2 = line_point2 - point
-        denom = np.linalg.norm(line_point1 - line_point2)
-        if denom < 1e-8:
-            return float("inf")
-        distance = np.abs(np.cross(vec1, vec2)) / denom
-        return distance
-
-    def judge(self, p1, p2, p3):
-        A = p2[1] - p1[1]
-        B = p1[0] - p2[0]
-        C = p2[0] * p1[1] - p1[0] * p2[1]
-
-        value = A * p3[0] + B * p3[1] + C
-
-        return value
-
-    def angle(self, v1, v2):
-        lx = np.sqrt(v1.dot(v1))
-        ly = np.sqrt(v2.dot(v2))
-        if lx < 1e-8 or ly < 1e-8:
-            return 0.0
-        cos_angle = v1.dot(v2) / (lx * ly)
-        cos_angle = np.clip(cos_angle, -1.0, 1.0)
-
-        angle = np.arccos(cos_angle)
-        angle2 = angle * 360 / 2 / np.pi
-
-        return angle2

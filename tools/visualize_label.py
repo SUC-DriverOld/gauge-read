@@ -5,14 +5,14 @@ import argparse
 from gauge_read.datasets.augmentation import Augmentation
 from gauge_read.datasets.meter_data import MeterDataset
 from gauge_read.utils.config import AttrDict
-import matplotlib.pyplot as plt
 
 
-def heatmap(im_gray):
-    cmap = plt.get_cmap("jet")
-    rgba_img = cmap(255 - im_gray)
-    Hmap = np.delete(rgba_img, 3, 2)
-    return Hmap
+def to_black_white(mask):
+    mask = np.asarray(mask)
+    max_value = np.max(mask)
+    if max_value <= 0:
+        return np.zeros(mask.shape, dtype=np.uint8)
+    return np.array(mask * 255 / max_value, dtype=np.uint8)
 
 
 if __name__ == "__main__":
@@ -37,8 +37,8 @@ if __name__ == "__main__":
         img = ((img * stds + means) * 255).astype(np.uint8)
 
         cv2.imshow("imgs", img)
-        cv2.imshow("pointer_mask", heatmap(np.array(pointer_mask * 255 / np.max(pointer_mask), dtype=np.uint8)))
-        cv2.imshow("dail_mask", heatmap(np.array(dail_mask * 255 / np.max(dail_mask), dtype=np.uint8)))
-        cv2.imshow("text_mask", heatmap(np.array(text_mask * 255 / np.max(text_mask), dtype=np.uint8)))
+        cv2.imshow("pointer_mask", to_black_white(pointer_mask))
+        cv2.imshow("dail_mask", to_black_white(dail_mask))
+        cv2.imshow("text_mask", to_black_white(text_mask))
 
         cv2.waitKey(0)
